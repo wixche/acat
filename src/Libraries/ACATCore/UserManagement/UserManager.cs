@@ -1,7 +1,7 @@
-﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="UserManager.cs" company="Intel Corporation">
+﻿// <copyright file="UserManager.cs" company="Intel Corporation">
+////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Globalization;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.UserManagement
 {
@@ -64,30 +31,22 @@ namespace ACAT.Lib.Core.UserManagement
     /// Manages users.  The purpose for having "users" is to support apps
     /// that require multi-user support.  Assets such as word prediction models,
     /// abbreviations etc are user specific and the application can store
-    /// them in the user directory
+    /// them in the user directory.
+    /// Gets paths to the various files relative to the User folder.
     /// </summary>
     public class UserManager
     {
+        public const String BaseUserInstallDir = "Install\\Users";
+
         /// <summary>
         /// Name of the default user
         /// </summary>
-        public const String DefaultUserName = "Default";
+        public const String DefaultUserName = "DefaultUser";
 
         /// <summary>
         /// The name of the current user
         /// </summary>
         private static String _currentUserName = DefaultUserName;
-
-#if SUPPORT_ASSETS
-        private static String _sourceDir = "Install";
-
-        private static Tuples<Assets, String, String> _assetList = new Tuples<Assets, string, string>
-        {
-            {Assets.Abbreviations, "AbbreviationsEmpty.xml", "Abbreviations.xml"},
-            {Assets.Spellings, "SpellCheck.xml", "*"},
-            {Assets.WordPrediction, "WordPrediction", "*"}
-        };
-#endif
 
         /// <summary>
         /// Initializes the user manager
@@ -114,17 +73,6 @@ namespace ACAT.Lib.Core.UserManagement
         }
 
         /// <summary>
-        /// Gets the root path to the "Users" directory
-        /// </summary>
-        public static String UsersDirBasePath
-        {
-            get
-            {
-                return FileUtils.GetUsersDir();
-            }
-        }
-
-        /// <summary>
         /// Returns the root path to the directory of the current user
         /// </summary>
         public static String CurrentUserDir
@@ -136,62 +84,40 @@ namespace ACAT.Lib.Core.UserManagement
         }
 
         /// <summary>
-        /// Returns the user dir for the specified user name
+        /// Gets the root path to the "Users" directory
         /// </summary>
-        /// <param name="userName">name of the user</param>
-        /// <returns>user directory</returns>
-        public static String GetUserDir(String userName)
+        public static String UsersDirBasePath
         {
-            return Path.Combine(FileUtils.GetUsersDir(), userName);
-        }
-
-        /// <summary>
-        /// Gets the full path relative to the user dir of the specified
-        /// relative path / filename
-        /// </summary>
-        /// <param name="path">relative path</param>
-        /// <returns>full path</returns>
-        public static String GetFullPath(String path)
-        {
-            return Path.Combine(CurrentUserDir, path);
-        }
-
-        /// <summary>
-        /// Checks if the current user's directory exists
-        /// </summary>
-        /// <returns>true on success</returns>
-        public static bool CurrentUserExists()
-        {
-            return UserExists(_currentUserName);
-        }
-
-        /// <summary>
-        /// Checks if the specified user name exists (checks if the
-        /// directory exists)
-        /// </summary>
-        /// <param name="userName">name of the user</param>
-        /// <returns>true on success</returns>
-        public static bool UserExists(String userName)
-        {
-            return Directory.Exists(GetUserDir(userName));
-        }
-
-        /// <summary>
-        /// Checks if the default user exists
-        /// </summary>
-        /// <returns>true if it does</returns>
-        public static bool DefaultUserExists()
-        {
-            return UserExists(DefaultUserName);
+            get
+            {
+                return FileUtils.GetUsersDir();
+            }
         }
 
         /// <summary>
         /// Creates default user directory
         /// </summary>
         /// <returns>true on success</returns>
-        public static bool CreateDefaultUser()
+        public static bool CreateDefaultUserDir()
         {
-            return CreateUser(DefaultUserName);
+            return CreateUserDir(DefaultUserName);
+        }
+
+        /// <summary>
+        /// Creates the folder specified user
+        /// </summary>
+        /// <param name="userName">Name of the user</param>
+        /// <returns>true on success</returns>
+        public static bool CreateUser(String userName, String sourceUserInstallPath = null)
+        {
+            var srcDir = String.IsNullOrEmpty(sourceUserInstallPath) ?
+                                Path.Combine(SmartPath.ApplicationPath, BaseUserInstallDir, UserManager.DefaultUserName) :
+                                sourceUserInstallPath;
+
+            var targetDir = Path.Combine(UserManager.CurrentUserDir);
+
+            Log.Debug("Copy directory " + srcDir + "=> " + targetDir);
+            return FileUtils.CopyDir(srcDir, targetDir);
         }
 
         /// <summary>
@@ -199,7 +125,7 @@ namespace ACAT.Lib.Core.UserManagement
         /// </summary>
         /// <param name="userName">name of the user</param>
         /// <returns>true on success</returns>
-        public static bool CreateUser(String userName)
+        public static bool CreateUserDir(String userName)
         {
             bool retVal = true;
 
@@ -221,11 +147,31 @@ namespace ACAT.Lib.Core.UserManagement
             }
             catch (Exception ex)
             {
+                MessageBox.Show("Error creating dir. ex: " + ex);
+
                 Log.Debug(ex.ToString());
                 retVal = false;
             }
 
             return retVal;
+        }
+
+        /// <summary>
+        /// Checks if the current user's directory exists
+        /// </summary>
+        /// <returns>true on success</returns>
+        public static bool CurrentUserExists()
+        {
+            return UserExists(_currentUserName);
+        }
+
+        /// <summary>
+        /// Checks if the default user exists
+        /// </summary>
+        /// <returns>true if it does</returns>
+        public static bool DefaultUserExists()
+        {
+            return UserExists(DefaultUserName);
         }
 
         /// <summary>
@@ -236,6 +182,70 @@ namespace ACAT.Lib.Core.UserManagement
         public static bool DeleteUser(String userName)
         {
             return false;
+        }
+
+        /// <summary>
+        /// Gets the full path relative to the user dir of the specified
+        /// relative path / filename
+        /// </summary>
+        /// <param name="path">relative path</param>
+        /// <returns>full path</returns>
+        public static String GetFullPath(String path)
+        {
+            return Path.Combine(CurrentUserDir, path);
+        }
+
+        /// <summary>
+        /// Returns the culture specific dir under the user folder
+        /// </summary>
+        /// <returns>dir</returns>
+        public static String GetResourcesDir()
+        {
+            var dirName = Path.Combine(CurrentUserDir, Thread.CurrentThread.CurrentUICulture.Name);
+
+            return Directory.Exists(dirName) ? dirName : Path.Combine(CurrentUserDir, Thread.CurrentThread.CurrentUICulture.TwoLetterISOLanguageName);
+        }
+
+        /// <summary>
+        /// Returns the culture specific dir under the user folder
+        /// for the specified culture
+        /// <param name="ci">Cultureinfo</param>
+        /// <returns>dir</returns>
+        public static String GetResourcesDir(CultureInfo ci)
+        {
+            var dirName = Path.Combine(CurrentUserDir, ci.Name);
+
+            return Directory.Exists(dirName) ? dirName : Path.Combine(CurrentUserDir, ci.TwoLetterISOLanguageName);
+        }
+
+        /// <summary>
+        /// Returns the user dir for the specified user name
+        /// </summary>
+        /// <param name="userName">name of the user</param>
+        /// <returns>user directory</returns>
+        public static String GetUserDir(String userName)
+        {
+            return Path.Combine(FileUtils.GetUsersDir(), userName);
+        }
+
+        /// <summary>
+        /// Returns the source install folder for the Default user
+        /// </summary>
+        /// <returns>path</returns>
+        public static String GetUserInstallDir()
+        {
+            return Path.Combine(SmartPath.ApplicationPath, BaseUserInstallDir, DefaultUserName);
+        }
+
+        /// <summary>
+        /// Checks if the specified user name exists (checks if the
+        /// directory exists)
+        /// </summary>
+        /// <param name="userName">name of the user</param>
+        /// <returns>true on success</returns>
+        public static bool UserExists(String userName)
+        {
+            return Directory.Exists(GetUserDir(userName));
         }
     }
 }

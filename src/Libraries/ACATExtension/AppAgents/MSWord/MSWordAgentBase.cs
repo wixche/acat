@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="MSWordAgentBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,16 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Automation;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.AppAgents.MSWord
 {
@@ -85,20 +50,30 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         protected bool isWordInstalled;
 
         /// <summary>
+        /// Automatically unprotect protected word docs when they are opened
+        /// </summary>
+        protected bool autoUnprotectWordDocs;
+
+        /// <summary>
+        /// Snap window to alphabe scanner
+        /// </summary>
+        protected bool snapWindowDockAlphabetScanner;
+
+        /// <summary>
         /// List of features supported by this agent. These
         /// widgets will be enabled in the scanners.
         /// </summary>
-        protected String[] supportedFeatures =
+        protected String[] supportedCommands =
         {
             "NewFile",
             "OpenFile",
             "OpenRecentFile",
             "SaveFileAs",
-            "Find",
-            "ContextualMenu",
-            "ZoomIn",
-            "ZoomOut",
-            "ZoomFit"
+            "CmdFind",
+            "CmdContextMenu",
+            "CmdZoomIn",
+            "CmdZoomOut",
+            "CmdZoomFit"
         };
 
         /// <summary>
@@ -154,9 +129,9 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         /// will depend on the current context.
         /// </summary>
         /// <param name="arg">contains info about the widget</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            checkWidgetEnabled(supportedFeatures, arg);
+            checkCommandEnabled(supportedCommands, arg);
         }
 
         /// <summary>
@@ -169,9 +144,9 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         }
 
         /// <summary>
-        /// Invoked when the foreground window focus changes. Display the
+        /// Invoked when the foreground window focus changes. Displays the
         /// scanner depending on the context. Also, if this is a new window that has
-        /// come into focus, add its contents to the word prediction temporary batch model for more
+        /// come into focus, adds its contents to the word prediction temporary batch model for more
         /// contextual prediction of words
         /// </summary>
         /// <param name="monitorInfo">Foreground window info</param>
@@ -229,7 +204,7 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         }
 
         /// <summary>
-        /// Invoked to run a command
+        /// Executes the specified command
         /// </summary>
         /// <param name="command">The command to execute</param>
         /// <param name="commandArg">Optional arguments for the command</param>
@@ -239,12 +214,6 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
             handled = true;
             switch (command)
             {
-                case "MenuContextClose":
-                    AgentManager.Instance.Keyboard.Send(Keys.Escape);
-                    AgentManager.Instance.Keyboard.Send(Keys.Escape);
-                    AgentManager.Instance.Keyboard.Send(Keys.Escape);
-                    break;
-
                 case "SwitchAppWindow":
                     DialogUtils.ShowTaskSwitcher(MSWordProcessName);
                     break;
@@ -290,6 +259,18 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
                     //DialogUtils.Toast("Saved");
                     break;
 
+                case "CmdSnapMaxDockWindowToggle":
+                    if (snapWindowDockAlphabetScanner)
+                    {
+                        Windows.ToggleForegroundWindowMaximizeDock(Context.AppPanelManager.GetCurrentForm() as Form,
+                            Context.AppWindowPosition, true);
+                    }
+                    else
+                    {
+                        Windows.ToggleSnapForegroundWindow(Context.AppWindowPosition, Common.AppPreferences.WindowSnapSizePercent);
+                    }
+                    break;
+
                 case "MSWordLectureManager":
                     if (_textInterface is MSWordTextControlAgent)
                     {
@@ -298,11 +279,11 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
                         if (String.IsNullOrEmpty(text.Trim()))
                         {
                             DialogUtils.ShowTimedDialog(PanelManager.Instance.GetCurrentPanel() as Form,
-                                                        "Lecture Manager", "Document is empty");
+                                R.GetString("LectureManager"), R.GetString("DocumentIsEmpty"));
                             break;
                         }
 
-                        if (DialogUtils.ConfirmScanner("Load this document into Lecture Manager?"))
+                        if (DialogUtils.ConfirmScanner(R.GetString("LoadThisDocIntoLM")))
                         {
                             launchLectureManager(textAgent.GetFileName(), text);
                         }
@@ -324,6 +305,7 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
             if (_textInterface == null)
             {
                 _textInterface = new MSWordTextControlAgent();
+                (_textInterface as MSWordTextControlAgent).autoUnprotectWordDocs = autoUnprotectWordDocs;
                 setTextInterface(_textInterface);
                 _textInterface.EvtTextChanged += _textInterface_EvtTextChanged;
             }
@@ -349,7 +331,7 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         /// <returns>task</returns>
         protected async void launchLectureManager(String fileName, String text)
         {
-            IApplicationAgent agent = Context.AppAgentMgr.GetAgentByName("Lecture Manager Agent");
+            IApplicationAgent agent = Context.AppAgentMgr.GetAgentByCategory("LectureManagerAgent");
             if (agent != null)
             {
                 IExtension extension = agent;
@@ -420,8 +402,7 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         /// </summary>
         private void unloadWordPredictionContext()
         {
-            Context.AppWordPredictionManager.ActiveWordPredictor.UnloadContext(_wordPredictionContext);           
+            Context.AppWordPredictionManager.ActiveWordPredictor.UnloadContext(_wordPredictionContext);
         }
-
     }
 }

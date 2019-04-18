@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="DLLHostAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,15 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
 {
@@ -69,23 +36,49 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
     /// For now, it supports only Windows Photo Viewer but can be
     /// extended to support other services that DLLHost enables.
     /// </summary>
-    [DescriptorAttribute("5D49B45B-0CD3-4058-BE2A-816A15600FA8", "DLL Host Agent", "App Agent DLL Host (eg Windows Photo Viewer)")]
+    [DescriptorAttribute("5D49B45B-0CD3-4058-BE2A-816A15600FA8",
+                            "DLLHost Agent (Win7)",
+                            "Manages interactions with Windows 7 apps such as the Photo Viewer")]
     internal class DLLHostAgent : GenericAppAgentBase
     {
         /// <summary>
-        /// Title of the contextual menu for the Photo viewer
+        /// Settings for this agent
         /// </summary>
-        private const string PhotoViewerTitle = "Photo Viewer";
+        internal static DLLHostAgentSettings Settings;
 
         /// <summary>
-        /// Title of the windows photo viewer application window
+        /// Name of the settings file
         /// </summary>
-        private const string WindowsPhotoViewerTitle = "windows photo viewer";
+        private const string SettingsFileName = "DLLHostAgentSettings.xml";
+
+        /// <summary>
+        /// Title of the contextual menu for the Photo viewer
+        /// </summary>
+        private readonly string _photoViewerTitle = R.GetString("PhotoViewer");
 
         /// <summary>
         /// Which features does this support?
         /// </summary>
-        private readonly String[] _supportedFeatures = { "ContextualMenu" };
+        private readonly String[] _supportedCommands = { "CmdContextMenu" };
+
+        /// <summary>
+        /// Title of the windows photo viewer application window
+        /// </summary>
+        private readonly string WindowsPhotoViewerTitle = R.GetString("WindowsPhotoViewer").ToLower();
+
+        /// <summary>
+        /// Has the scanner been shown yet?
+        /// </summary>
+        private bool _scannerShown;
+
+        /// <summary>
+        /// Initializes an instance of the class
+        /// </summary>
+        public DLLHostAgent()
+        {
+            DLLHostAgentSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
+            Settings = DLLHostAgentSettings.Load();
+        }
 
         /// <summary>
         /// Which processes does this agent support?
@@ -100,9 +93,27 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
         /// to determine the 'enabled' state.
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            checkWidgetEnabled(_supportedFeatures, arg);
+            checkCommandEnabled(_supportedCommands, arg);
+        }
+
+        /// <summary>
+        /// Returns the default settings
+        /// </summary>
+        /// <returns>Default settings object</returns>
+        public override IPreferences GetDefaultPreferences()
+        {
+            return PreferencesBase.LoadDefaults<DLLHostAgentSettings>();
+        }
+
+        /// <summary>
+        /// Returns the settings for this agent
+        /// </summary>
+        /// <returns>The settings object</returns>
+        public override IPreferences GetPreferences()
+        {
+            return Settings;
         }
 
         /// <summary>
@@ -111,11 +122,8 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
         /// <param name="monitorInfo">info about foreground window</param>
         public override void OnContextMenuRequest(WindowActivityMonitorInfo monitorInfo)
         {
-            var title = monitorInfo.Title.ToLower();
-            if (title.Contains(WindowsPhotoViewerTitle))
-            {
-                showPanel(this, new PanelRequestEventArgs("WindowsPhotoViewerContextMenu", monitorInfo));
-            }
+            bool handled = false;
+            displayScanner(monitorInfo, ref handled);
         }
 
         /// <summary>
@@ -126,15 +134,36 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
         /// <param name="handled">was this handled</param>
         public override void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
-            base.OnFocusChanged(monitorInfo, ref handled);
-
-            // for now, we  handle only the photo viewer.
-            var title = monitorInfo.Title.ToLower();
-            if (title.Contains(WindowsPhotoViewerTitle))
+            if (!_scannerShown || monitorInfo.IsNewWindow)
             {
-                showPanel(this, new PanelRequestEventArgs("WindowsPhotoViewerContextMenu", PhotoViewerTitle, monitorInfo));
+                if (Settings.AutoSwitchScannerEnable)
+                {
+                    displayScanner(monitorInfo, ref handled);
+                    if (handled)
+                    {
+                        _scannerShown = true;
+                    }
+                }
+                else
+                {
+                    base.OnFocusChanged(monitorInfo, ref handled);
+                    showPanel(this, new PanelRequestEventArgs(PanelClasses.Alphabet, monitorInfo));
+                    _scannerShown = true;
+                }
+            }
+            else
+            {
                 handled = true;
             }
+        }
+
+        /// <summary>
+        /// Focus shifted to another app.  This agent is
+        /// getting deactivated.
+        /// </summary>
+        public override void OnFocusLost()
+        {
+            _scannerShown = false;
         }
 
         /// <summary>
@@ -165,28 +194,17 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
                     break;
 
                 case "PhotoViewerZoomMenu":
-                    {
-                        var monitorInfo = WindowActivityMonitor.GetForegroundWindowInfo();
-                        var panelArg = new PanelRequestEventArgs("PhotoViewerZoomMenu", PhotoViewerTitle, monitorInfo)
-                        {
-                            UseCurrentScreenAsParent = true
-                        };
-                        showPanel(this, panelArg);
-                    }
-
+                    showPanel(this, new PanelRequestEventArgs("PhotoViewerZoomMenu",
+                                                                _photoViewerTitle,
+                                                                WindowActivityMonitor.GetForegroundWindowInfo(),
+                                                                true));
                     break;
 
                 case "PhotoViewerRotateMenu":
-                    {
-                        var monitorInfo = WindowActivityMonitor.GetForegroundWindowInfo();
-                        var panelArg = new PanelRequestEventArgs("PhotoViewerRotateMenu", PhotoViewerTitle, monitorInfo)
-                        {
-                            UseCurrentScreenAsParent = true
-                        };
-
-                        showPanel(this, panelArg);
-                    }
-
+                    showPanel(this, new PanelRequestEventArgs("PhotoViewerRotateMenu",
+                                                                _photoViewerTitle,
+                                                                WindowActivityMonitor.GetForegroundWindowInfo(),
+                                                                true));
                     break;
 
                 case "CmdZoomIn":
@@ -212,6 +230,21 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.DLLHostAgent
                 default:
                     base.OnRunCommand(command, commandArg, ref handled);
                     break;
+            }
+        }
+
+        /// <summary>
+        /// Displays scanner depending on which app has focus
+        /// </summary>
+        /// <param name="monitorInfo">window info</param>
+        /// <param name="handled">was it handled?</param>
+        private void displayScanner(WindowActivityMonitorInfo monitorInfo, ref bool handled)
+        {
+            var title = monitorInfo.Title.ToLower();
+            if (title.Contains(WindowsPhotoViewerTitle))
+            {
+                showPanel(this, new PanelRequestEventArgs("WindowsPhotoViewerContextMenu", _photoViewerTitle, monitorInfo));
+                handled = true;
             }
         }
     }

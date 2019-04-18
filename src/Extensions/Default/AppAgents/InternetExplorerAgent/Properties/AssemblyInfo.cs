@@ -6,13 +6,14 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("InternetExplorerAgent")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Assistive Context-Aware Toolkit (ACAT)")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Microsoft")]
-[assembly: AssemblyProduct("InternetExplorerAgent")]
-[assembly: AssemblyCopyright("Copyright © Microsoft 2013")]
+[assembly: AssemblyCompany("http://01.org/acat")]
+[assembly: AssemblyProduct("Assistive Context-Aware Toolkit (ACAT)")]
+[assembly: AssemblyCopyright("Licensed and distributed under the Apache License v2.0 by Intel Corporation")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 

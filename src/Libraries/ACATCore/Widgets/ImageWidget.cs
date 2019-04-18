@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ImageWidget.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,58 +18,25 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
+using ACAT.Lib.Core.WidgetManagement;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Widgets
 {
     /// <summary>
-    /// A button that displays an image.  The image can
-    /// be cropped to fit into the rectangle. All crop
+    /// A PictureBox or a Button control that displays an image.
+    /// The image can be cropped to fit into the rectangle. All crop
     /// parameters are configurable through the xml file
-    /// for the scanner
+    /// for the scanner.  The "Label" attribute in the scanner
+    /// config file WidgetAttribute node should contain the
+    /// name of the image file.  The image file should reside
+    /// in the Images directory under the ACAT Assets folder.
     /// </summary>
-    public class ImageWidget : PictureBoxWidgetBase
+    public class ImageWidget : ImageWidgetBase
     {
         /// <summary>
         /// Height of the cropped image
@@ -180,7 +147,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Render the image onto the screen
+        /// Render the image onto the control
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">eventargs</param>
@@ -203,6 +170,9 @@ namespace ACAT.Lib.Core.Widgets
             }
         }
 
+        /// <summary>
+        /// Uninitialize. Release resources
+        /// </summary>
         private void unInit()
         {
             if (_image != null)

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="NotepadAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,44 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension.AppAgents.Notepad;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Extensions.Base.AppAgents.NotepadAgent
 {
@@ -64,8 +30,50 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.NotepadAgent
     /// Base class does all the heavy-lifting.  Override functions
     /// as required customize
     /// </summary>
-    [DescriptorAttribute("A9CB65E6-C63B-4C47-B1DB-2010955FFD17", "Notepad Agent", "Agent for Notepad")]
+    [DescriptorAttribute("A9CB65E6-C63B-4C47-B1DB-2010955FFD17",
+                            "Notepad Agent",
+                            "Manages interactions with Windows Notepad to edit text files")]
     internal class NotepadAgent : NotepadAgentBase
     {
+        /// <summary>
+        /// Settings for this agent
+        /// </summary>
+        internal static NotepadAgentSettings Settings;
+
+        /// <summary>
+        /// Name of the settings file
+        /// </summary>
+        private const string SettingsFileName = "NotepadAgentSettings.xml";
+
+        /// <summary>
+        /// Initializes an instance of the class
+        /// </summary>
+        public NotepadAgent()
+        {
+            NotepadAgentSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
+
+            Settings = NotepadAgentSettings.Load();
+
+            autoSwitchScanners = Settings.AutoSwitchScannerEnable;
+            snapWindowDockAlphabetScanner = Settings.SnapWindowDockAlphabetScanner;
+        }
+
+        /// <summary>
+        /// Returns the default settings
+        /// </summary>
+        /// <returns>Default settings object</returns>
+        public override IPreferences GetDefaultPreferences()
+        {
+            return PreferencesBase.LoadDefaults<NotepadAgentSettings>();
+        }
+
+        /// <summary>
+        /// Returns the settings for this agent
+        /// </summary>
+        /// <returns>The settings object</returns>
+        public override IPreferences GetPreferences()
+        {
+            return Settings;
+        }
     }
 }

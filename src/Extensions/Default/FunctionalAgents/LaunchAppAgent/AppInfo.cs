@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AppInfo.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Xml.Serialization;
 
 #region SupressStyleCopWarnings
 
@@ -56,7 +57,7 @@ using System.Diagnostics.CodeAnalysis;
 
 #endregion SupressStyleCopWarnings
 
-namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
+namespace ACAT.Extensions.Default.FunctionalAgents.LaunchAppAgent
 {
     /// <summary>
     /// Serializable class that represents info about the application
@@ -69,7 +70,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <summary>
         /// To indicate a missing parameter
         /// </summary>
-        [NonSerialized]
+        [NonSerialized, XmlIgnore]
         private const string Missing = "";
 
         /// <summary>

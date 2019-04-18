@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="FirefoxTextControlAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -87,7 +87,8 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.FireFoxAgent
         }
 
         /// <summary>
-        /// Returns whether spell check is supported by this agent
+        /// Returns whether spell check is supported by this agent. Return
+        /// true so ACAT"s spellchecker doesn't kick in.
         /// </summary>
         /// <returns>always returns true</returns>
         public override bool SupportsSpellCheck()

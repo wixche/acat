@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="SpellCheckers.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,61 +18,48 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.UserManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.SpellCheckManagement
 {
     /// <summary>
-    /// Maintains a list of discovered word predictors in an internal cache.
-    /// The mapping is between the GUID for the word predictor and the .NET
-    /// Type of the word predictor.  The Type will be used to instantiate the
-    /// word predictor using Reflection
+    /// Maintains a list of discovered SpellCheckers in an internal cache.
+    /// The mapping is between the GUID for the SpellChecker and the
+    /// SpellChecker object.
     /// </summary>
     public class SpellCheckers : IDisposable
     {
         /// <summary>
-        /// Table mapping the GUID to the word predictor Type
+        /// Name of the config file where ID's of preferred spellcheckers are stored
         /// </summary>
-        private readonly Dictionary<Guid, Type> _spellCheckersTypeCache;
+        private const String PreferredConfigFile = "PreferredSpellCheckers.xml";
+
+        /// <summary>
+        /// Null spellchecker. Doesn't do anything :-)
+        /// </summary>
+        private static ISpellChecker _nullSpellChecker = null;
+
+        /// <summary>
+        /// The object that holds the preferred spellcheckers
+        /// </summary>
+        private readonly PreferredSpellCheckers _preferredSpellCheckers;
+
+        /// <summary>
+        /// Table mapping the GUID and culture to the spellchecker Type
+        /// </summary>
+        private readonly Dictionary<Guid, Tuple<String, Type>> _spellCheckersTypeCache;
+
+        /// <summary>
+        /// Top level language-specific folder (eg en, fr etc)
+        /// </summary>
+        private String _dirWalkCurrentCulture;
 
         /// <summary>
         /// Has this object been disposed
@@ -80,19 +67,42 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         private bool _disposed;
 
         /// <summary>
-        /// Initializes an instance of the WordPredictors class
+        /// Initializes an instance of the class
         /// </summary>
         public SpellCheckers()
         {
-            _spellCheckersTypeCache = new Dictionary<Guid, Type>();
+            _spellCheckersTypeCache = new Dictionary<Guid, Tuple<String, Type>>();
+
+            PreferredSpellCheckers.FilePath = UserManager.GetFullPath(PreferredConfigFile);
+            _preferredSpellCheckers = PreferredSpellCheckers.Load();
         }
 
         /// <summary>
-        /// Gets a collection of word predictor types from the cache
+        /// Gets the null spellchecker object
+        /// </summary>
+        public static ISpellChecker NullSpellChecker
+        {
+            get
+            {
+                if (_nullSpellChecker == null)
+                {
+                    _nullSpellChecker = new NullSpellChecker();
+                    _nullSpellChecker.Init(CultureInfo.DefaultThreadCurrentUICulture);
+                }
+
+                return _nullSpellChecker;
+            }
+        }
+
+        /// <summary>
+        /// Gets a collection of spellchecker types from the cache
         /// </summary>
         public ICollection<Type> Collection
         {
-            get { return _spellCheckersTypeCache.Values; }
+            get
+            {
+                return _spellCheckersTypeCache.Values.Select(value => value.Item2).ToList();
+            }
         }
 
         /// <summary>
@@ -108,30 +118,97 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Returns the ID of the spellchecker by looking
-        /// up the spellCheckerName of the spellchecker
+        /// Returns the list of spellcheckers for the specified language
         /// </summary>
-        /// <param spellCheckerName="spellCheckerName">name to check</param>
-        /// <returns>the spellchecker id, Empty if not found</returns>
-        public Guid GetByName(String spellCheckerName)
+        /// <param name="language">language (culture)</param>
+        /// <returns>list of spellcheckers</returns>
+        public ICollection<Type> Get(String language)
         {
-            foreach (var type in _spellCheckersTypeCache.Values)
+            var list = _spellCheckersTypeCache.Values;
+
+            return (String.IsNullOrEmpty(language) || language.Length == 0) ?
+                (from tuple in list where String.IsNullOrEmpty(tuple.Item1) select tuple.Item2).ToList() :
+                (from tuple in list where String.Compare(tuple.Item1, language, true) == 0 select tuple.Item2).ToList();
+        }
+
+        /// <summary>
+        /// Returns the ID of the SpellChecker that supports the
+        /// specified culture info.  If no culture-specific spellchecker
+        /// is found, Guid.Empty is returned
+        /// </summary>
+        /// <param name="ci">culture info</param>
+        /// <returns>ID of the spellchecker</returns>
+        public Guid GetDefaultByCulture(CultureInfo ci)
+        {
+            Tuple<String, Type> foundTuple = null;
+
+            // first look for culture-specific word predictors
+            foreach (var tuple in _spellCheckersTypeCache.Values)
             {
-                var descriptor = DescriptorAttribute.GetDescriptor(type);
-                if (descriptor != null && String.Compare(descriptor.Name, spellCheckerName, true) == 0)
+                if (ci == null)
                 {
-                    Log.Debug("Found spellchecker [" + spellCheckerName + "]");
+                    if (String.IsNullOrEmpty(tuple.Item1))
+                    {
+                        foundTuple = tuple;
+                        break;
+                    }
+                }
+                else if (!String.IsNullOrEmpty(tuple.Item1) &&
+                    (String.Compare(tuple.Item1, ci.Name, true) == 0) ||
+                    String.Compare(tuple.Item1, ci.TwoLetterISOLanguageName, true) == 0)
+                {
+                    foundTuple = tuple;
+                    break;
+                }
+            }
+
+            if (foundTuple != null)
+            {
+                IDescriptor descriptor = DescriptorAttribute.GetDescriptor(foundTuple.Item2);
+                if (descriptor != null)
+                {
+                    Log.Debug("Found spellchecker for culture " + (ci != null ? ci.Name : "Neutral") + "[" + descriptor.Name + "]");
                     return descriptor.Id;
                 }
             }
 
-            Log.Debug("Could not find spellchecker for [" + spellCheckerName + "]");
             return Guid.Empty;
         }
 
         /// <summary>
+        /// Returns the ID of the preferred spellcheckr for
+        /// the specifed culture, guid.Empty if none found
+        /// </summary>
+        /// <param name="ci">culture</param>
+        /// <returns>the guid</returns>
+        public Guid GetPreferredByCulture(CultureInfo ci)
+        {
+            return _preferredSpellCheckers.GetByCulture(ci);
+        }
+
+        /// <summary>
+        /// Returns the preferred spellchecker or the default spellchecker
+        /// for the specified culture.  Returns guid.empty
+        /// if none found for the culture
+        /// </summary>
+        /// <param name="ci">culture</param>
+        /// <returns>id of the spellchecker</returns>
+        public Guid GetPreferredOrDefaultByCulture(CultureInfo ci)
+        {
+            var guid = GetPreferredByCulture(ci);
+
+            if (Equals(guid, Guid.Empty))
+            {
+                guid = GetDefaultByCulture(ci);
+            }
+
+            return guid;
+        }
+
+        /// <summary>
         /// Recursively look into each of the extension directories looking
-        /// for WordPredictor DLL's. If found, cache the GUID and Type.
+        /// for SpellChecker DLL's. If found, cache the GUID and an instance of the
+        /// object.
         /// </summary>
         /// <param spellCheckerName="extensionDirs">list of extension directories</param>
         /// <param spellCheckerName="recursive">should it look deep?</param>
@@ -141,9 +218,25 @@ namespace ACAT.Lib.Core.SpellCheckManagement
             foreach (var dir in extensionDirs)
             {
                 var extensionDir = dir + "\\" + SpellCheckManager.SpellCheckersRootName;
-                loadSpellCheckerTypesIntoCache(extensionDir);
+                loadSpellCheckerTypesIntoCache(extensionDir, null, recursive);
             }
 
+            var languageDirs = ResourceUtils.GetInstalledLanugageDirectories();
+            foreach (string dir in languageDirs)
+            {
+                var extensionDir = dir + "\\" + FileUtils.ExtensionsDir;
+                var extensionsRoots = CoreGlobals.AppPreferences.Extensions.Split(',');
+                var lastIndex = dir.LastIndexOf("\\");
+                var language = dir.Substring(lastIndex + 1);
+
+                foreach (string root in extensionsRoots)
+                {
+                    var extensionRoot = Path.Combine(extensionDir, root);
+                    extensionRoot = Path.Combine(extensionRoot, SpellCheckManager.SpellCheckersRootName);
+
+                    loadSpellCheckerTypesIntoCache(extensionRoot, language, recursive);
+                }
+            }
             return true;
         }
 
@@ -155,35 +248,60 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         /// <returns>.NET Type </returns>
         public Type Lookup(Guid guid)
         {
-            foreach (Type type in _spellCheckersTypeCache.Values)
+            if (Equals(guid, NullSpellChecker.Descriptor.Id))
+            {
+                return typeof(NullSpellChecker);
+            }
+
+            foreach (Type type in Collection)
             {
                 IDescriptor descriptor = DescriptorAttribute.GetDescriptor(type);
-                if (descriptor != null && Guid.Equals(guid, descriptor.Id))
+                if (descriptor != null && Equals(guid, descriptor.Id))
                 {
                     Log.Debug("Found spellchecker of type " + type);
                     return type;
                 }
             }
 
-            Log.Debug("Could not find spellchecker for id " + guid.ToString());
+            Log.Debug("Could not find spellchecker for id " + guid);
             return null;
         }
 
         /// <summary>
-        /// Adds the spell checker identified by the GUID and Type to
-        /// the cache.
-        /// <param name="guid">guid of the spell checker</param>
-        /// <param name="type">.NET Type of the class</param>
-        internal void add(Guid guid, Type type)
+        /// Sets the preferred spellchecker for the
+        /// specified language
+        /// </summary>
+        /// <param name="language">language (culture)</param>
+        /// <param name="guid">id of the spellchecker</param>
+        /// <returns>true on success</returns>
+        public bool SetPreferred(String language, Guid guid)
+        {
+            bool retVal = _preferredSpellCheckers.SetAsDefault(language, guid);
+            if (retVal)
+            {
+                retVal = _preferredSpellCheckers.Save();
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Adds the SpellChecker identified by the GUID and Type to
+        /// the cache
+        /// </summary>
+        /// <param name="guid">guid of the wp to add</param>
+        /// <param name="language">language (culture of the wp)</param>
+        /// <param name="type">the class Type of the wp</param>
+        internal void Add(Guid guid, String language, Type type)
         {
             if (_spellCheckersTypeCache.ContainsKey(guid))
             {
-                Log.Debug("Wordpredictor " + type.FullName + ", guid " + guid + " is already added");
+                Log.Debug("SpellChecker " + type.FullName + ", guid " + guid + " is already added");
                 return;
             }
 
-            Log.Debug("Adding Wordpredictor " + type.FullName + ", guid " + guid + " to cache");
-            _spellCheckersTypeCache.Add(guid, type);
+            Log.Debug("Adding SpellChecker " + type.FullName + ", guid " + guid + " to cache");
+            _spellCheckersTypeCache.Add(guid, new Tuple<String, Type>(language, type));
         }
 
         /// <summary>
@@ -200,6 +318,11 @@ namespace ACAT.Lib.Core.SpellCheckManagement
                 if (disposing)
                 {
                     _spellCheckersTypeCache.Clear();
+
+                    if (_nullSpellChecker != null)
+                    {
+                        _nullSpellChecker.Dispose();
+                    }
                 }
 
                 // Release unmanaged resources.
@@ -209,13 +332,16 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Recursively walks through the directory and discovers the word
-        /// predictor DLL's in there and loads their Types into the cache
+        /// Recursively walks through the directory and discovers the spellchecker
+        /// DLL's in there and loads their Types into the cache
         /// </summary>
-        /// <param name="dir">root directory</param>
-        private void loadSpellCheckerTypesIntoCache(String dir)
+        /// <param name="dir">dir to descend into</param>
+        /// <param name="culture">culture (optional) of the word predictor</param>
+        /// <param name="resursive">true if deep-descend</param>
+        private void loadSpellCheckerTypesIntoCache(String dir, String culture, bool resursive = true)
         {
-            var walker = new DirectoryWalker(dir, "*.dll");
+            DirectoryWalker walker = new DirectoryWalker(dir, "*.dll");
+            _dirWalkCurrentCulture = culture;
             walker.Walk(new OnFileFoundDelegate(onFileFound));
         }
 
@@ -236,7 +362,7 @@ namespace ACAT.Lib.Core.SpellCheckManagement
                         var attr = DescriptorAttribute.GetDescriptor(type);
                         if (attr != null && attr.Id != Guid.Empty)
                         {
-                            add(attr.Id, type);
+                            Add(attr.Id, _dirWalkCurrentCulture, type);
                         }
                     }
                 }

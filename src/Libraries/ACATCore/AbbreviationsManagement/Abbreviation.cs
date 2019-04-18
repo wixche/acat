@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Abbreviation.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,18 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Text.RegularExpressions;
 
 namespace ACAT.Lib.Core.AbbreviationsManagement
 {
     /// <summary>
     /// Represents an abbreviation.  The abbreviation has a mnemonic,
-    /// the expansion and the mode of expansion - text or speech
+    /// the expansion and the mode of expansion - "Write" or "Speak".
+    /// In the first case, the abbreviation is expanded to its full form
+    /// in the textual form.  In the second case, the expansion is converted
+    /// to speech.
     /// </summary>
     public class Abbreviation : IDisposable
     {
@@ -81,9 +53,9 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         /// <summary>
         /// Initializes a new instance of the class
         /// </summary>
-        /// <param name="mnemonic"></param>
-        /// <param name="expansion"></param>
-        /// <param name="mode"></param>
+        /// <param name="mnemonic">abbreviation</param>
+        /// <param name="expansion">abbreviation expansion</param>
+        /// <param name="mode">mode of expansion - speech or text</param>
         public Abbreviation(String mnemonic, String expansion, AbbreviationMode mode)
         {
             init(mnemonic, expansion, mode);
@@ -170,9 +142,9 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         /// <summary>
         /// Initializes the properties of the abbreviation object
         /// </summary>
-        /// <param name="mnemonic"></param>
-        /// <param name="expansion"></param>
-        /// <param name="mode"></param>
+        /// <param name="mnemonic">abbreviation</param>
+        /// <param name="expansion">abbreviation expansion</param>
+        /// <param name="mode">mode of expansion - speech or text</param>
         private void init(String mnemonic, String expansion, AbbreviationMode mode)
         {
             Mnemonic = mnemonic.ToUpper();

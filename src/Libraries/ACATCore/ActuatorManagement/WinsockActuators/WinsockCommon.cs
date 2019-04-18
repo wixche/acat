@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WinsockCommon.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,52 +18,18 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
 
 namespace ACAT.Lib.Core.InputActuators
 {
     /// <summary>
-    /// A helper class for winsock based actuators.  Has methods to the parse
-    /// data
+    /// A helper class for winsock based actuators.  Data
+    /// from acutators is in the form of a parameterized String which has
+    /// to be parsed to decypher what the switch action was.  This class
+    /// has functions to parse the data
     /// </summary>
     internal class WinsockCommon
     {
@@ -115,8 +81,8 @@ namespace ACAT.Lib.Core.InputActuators
         /// <param name="createSwitchDel">A delegate function that creates an actuator switch object</param>
         /// <returns>A clone of the matching switch object from the collection</returns>
         public static IActuatorSwitch parseAndGetSwitch(
-                                            String strData, 
-                                            ICollection<IActuatorSwitch> switches, 
+                                            String strData,
+                                            ICollection<IActuatorSwitch> switches,
                                             CreateSwitchDelegate createSwitchDel)
         {
             IActuatorSwitch actuatorSwitch = null;
@@ -165,11 +131,15 @@ namespace ACAT.Lib.Core.InputActuators
             if (!String.IsNullOrEmpty(gesture) && switchAction != SwitchAction.Unknown)
             {
                 actuatorSwitch = getSwitchForGesture(gesture, switches, createSwitchDel);
-                actuatorSwitch.Action = switchAction;
-                actuatorSwitch.Confidence = confidence;
-                actuatorSwitch.Timestamp = time;
-                actuatorSwitch.Actuate = actuate;
-                actuatorSwitch.Tag = tag;
+
+                if (actuatorSwitch != null)
+                {
+                    actuatorSwitch.Action = switchAction;
+                    actuatorSwitch.Confidence = confidence;
+                    actuatorSwitch.Timestamp = time;
+                    actuatorSwitch.Actuate = actuate;
+                    actuatorSwitch.Tag = tag;
+                }
             }
 
             return actuatorSwitch;
@@ -204,8 +174,8 @@ namespace ACAT.Lib.Core.InputActuators
         /// <param name="createSwitchDel">Delegate that creates a clone of the switch</param>
         /// <returns></returns>
         private static IActuatorSwitch getSwitchForGesture(
-                                            String gesture, 
-                                            IEnumerable<IActuatorSwitch> switches, 
+                                            String gesture,
+                                            IEnumerable<IActuatorSwitch> switches,
                                             CreateSwitchDelegate createSwitchDel)
         {
             foreach (var switchObj in switches)

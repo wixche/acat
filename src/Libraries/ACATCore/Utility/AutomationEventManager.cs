@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AutomationEventManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -327,7 +327,7 @@ namespace ACAT.Lib.Core.Utility
                     _done = true;
                 }
             }
-            Log.Debug("******* EXITING HANDLER THREAD");
+            Log.Debug("Exiting Handler Thread");
         }
 
         /// <summary>
@@ -503,73 +503,6 @@ namespace ACAT.Lib.Core.Utility
             public AutomationEvent AutoEvent;
             public AutomationEventHandler EventHandler;
             public WindowElement WinElement;
-        }
-
-        /// <summary>
-        /// Blocking queue on which work items can be enqueued.
-        /// Dequeue is blocking until something arrives on the queue
-        /// </summary>
-        /// <typeparam name="T">data type to enqueue</typeparam>
-        private class BlockingQueue<T> : IEnumerable<T>
-        {
-            /// <summary>
-            /// The queue to hold the items
-            /// </summary>
-            private readonly Queue<T> _queue = new Queue<T>();
-
-            /// <summary>
-            /// How many itmes are in the queue?
-            /// </summary>
-            private int _count;
-
-            /// <summary>
-            /// Removes next item. If queue is empty,
-            /// blocks
-            /// </summary>
-            /// <returns>next item</returns>
-            public T Dequeue()
-            {
-                lock (_queue)
-                {
-                    while (_count <= 0) Monitor.Wait(_queue);
-                    _count--;
-                    return _queue.Dequeue();
-                }
-            }
-
-            /// <summary>
-            /// Enqueues the item and pulses to indicate
-            /// there is something there
-            /// </summary>
-            /// <param name="data">item to enqueue</param>
-            public void Enqueue(T data)
-            {
-                if (data == null) throw new ArgumentNullException("data");
-                lock (_queue)
-                {
-                    _queue.Enqueue(data);
-                    _count++;
-                    Monitor.Pulse(_queue);
-                }
-            }
-
-            /// <summary>
-            /// Returns enumerator for the queue
-            /// </summary>
-            /// <returns></returns>
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return ((IEnumerable<T>)this).GetEnumerator();
-            }
-
-            /// <summary>
-            /// Returns enumerator to peek into the queue
-            /// </summary>
-            /// <returns>enumerator</returns>
-            IEnumerator<T> IEnumerable<T>.GetEnumerator()
-            {
-                while (true) yield return Dequeue();
-            }
         }
 
         /// <summary>
@@ -829,7 +762,7 @@ namespace ACAT.Lib.Core.Utility
                     }
                     else
                     {
-                        Log.Debug("Event already registered.  Will not be readded" +
+                        Log.Debug("Event already Removed." +
                                         autoEvent.ProgrammaticName + ". AutomationID: " +
                                         (element.Current.AutomationId ?? "none"));
                     }

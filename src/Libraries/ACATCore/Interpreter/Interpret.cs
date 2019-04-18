@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Interpret.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Interpreter
 {
@@ -136,11 +100,25 @@ namespace ACAT.Lib.Core.Interpreter
         public delegate void Run(object sender, InterpreterRunEventArgs e);
 
         /// <summary>
+        /// Delegate for the hook function to the run command
+        /// </summary>
+        /// <param name="args">run command arguments</param>
+        /// <param name="handled">was it handled?</param>
+        public delegate void RunCommandHook(InterpreterRunEventArgs args, ref bool handled);
+
+        /// <summary>
         /// Selects a widget.
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event argument</param>
         public delegate void Select(object sender, InterpreterEventArgs e);
+
+        /// <summary>
+        /// Shows a scanner as a popup
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event argument</param>
+        public delegate void ShowPopup(object sender, InterpreterEventArgs e);
 
         /// <summary>
         /// Stop animation
@@ -155,6 +133,11 @@ namespace ACAT.Lib.Core.Interpreter
         /// <param name="sender">event sender</param>
         /// <param name="e">event argument</param>
         public delegate void Transition(object sender, InterpreterEventArgs e);
+
+        /// <summary>
+        /// Event triggered for the hook for the run command
+        /// </summary>
+        public static event RunCommandHook EvtRunCommandHook;
 
         /// <summary>
         /// Raised to actuate a widget
@@ -197,6 +180,11 @@ namespace ACAT.Lib.Core.Interpreter
         public event Select EvtSelectNotify;
 
         /// <summary>
+        /// Raised to show a scanner as popup
+        /// </summary>
+        public event ShowPopup EvtShowPopup;
+
+        /// <summary>
         /// Raised to stop the current animation
         /// </summary>
         public event Stop EvtStopNotify;
@@ -228,7 +216,7 @@ namespace ACAT.Lib.Core.Interpreter
         }
 
         /// <summary>
-        /// Executes the action for the specificed action verb. It
+        /// Executes the action for the specified action verb. It
         /// contains one function with arguments
         /// </summary>
         /// <param name="actionVerb">action to perform</param>
@@ -259,7 +247,7 @@ namespace ACAT.Lib.Core.Interpreter
         }
 
         /// <summary>
-        /// Load scripts from the XML file
+        /// Loads scripts from the XML file
         /// </summary>
         /// <param name="configFile">Name of the xml file</param>
         /// <returns>true on success</returns>
@@ -285,7 +273,7 @@ namespace ACAT.Lib.Core.Interpreter
         }
 
         /// <summary>
-        /// Play a beep sound
+        /// Plays a beep sound
         /// </summary>
         /// <param name="args">argument list</param>
         /// <returns>true on success</returns>
@@ -356,7 +344,32 @@ namespace ACAT.Lib.Core.Interpreter
         }
 
         /// <summary>
-        /// Run scripts through the "run" command.  Each element
+        /// Notifies the subscribers of the hook event that a run command
+        /// was encountered.  Give them a chance to act on it first
+        /// </summary>
+        /// <param name="args">run command args</param>
+        /// <param name="handled">did any of them handle it?</param>
+        private void notifyRunCommandHookSubscribers(InterpreterRunEventArgs args, ref bool handled)
+        {
+            if (EvtRunCommandHook == null)
+            {
+                return;
+            }
+
+            var delegates = EvtRunCommandHook.GetInvocationList();
+            foreach (var del in delegates)
+            {
+                var hookDelegate = (RunCommandHook)del;
+                hookDelegate.Invoke(args, ref handled);
+                if (handled)
+                {
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Runs scripts through the "run" command.  Each element
         /// in the args list is a reference to either a script name
         /// or the command itself.  If an arg begins with the '@' symbol,
         /// it is the name of a scirpt otherwise, it;s a command
@@ -389,7 +402,16 @@ namespace ACAT.Lib.Core.Interpreter
                 }
                 else
                 {
-                    EvtRun(this, new InterpreterRunEventArgs(scriptName));
+                    // first notify the hook subscribers.  If none of them handled it
+                    // then invoke the event
+
+                    bool handled = false;
+                    notifyRunCommandHookSubscribers(new InterpreterRunEventArgs(scriptName), ref  handled);
+
+                    if (!handled)
+                    {
+                        EvtRun(this, new InterpreterRunEventArgs(scriptName));
+                    }
                 }
             }
 
@@ -411,8 +433,18 @@ namespace ACAT.Lib.Core.Interpreter
             return true;
         }
 
+        private bool showPopup(List<String> args)
+        {
+            if (EvtShowPopup != null)
+            {
+                EvtShowPopup(this, new InterpreterEventArgs(args));
+            }
+
+            return true;
+        }
+
         /// <summary>
-        /// Stop animation
+        /// Stops animation
         /// </summary>
         /// <returns>true on success</returns>
         private bool stop(List<String> args)

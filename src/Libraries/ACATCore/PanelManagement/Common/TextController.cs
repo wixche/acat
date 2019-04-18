@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TextController.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AbbreviationsManagement;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -109,12 +73,31 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <summary>
         /// Tracks the current state of text entry
         /// </summary>
-        private enum LastAction
+        public enum LastAction
         {
             Unknown,
             AlphaNumeric,
             Punctuation,
             AutoCompleteWord
+        }
+
+        /// <summary>
+        /// Gets the last editing change
+        /// </summary>
+        public static LastAction LastEditChange
+        {
+            get { return _lastAction; }
+        }
+
+        /// <summary>
+        /// Checks if the specified key (such as alt, ctrl, shift)
+        /// is down
+        /// </summary>
+        /// <param name="vKey">key to check</param>
+        /// <returns>true if it is</returns>
+        public static bool IsKeyDown(Keys vKey)
+        {
+            return 0 != (User32Interop.GetAsyncKeyState((int)vKey) & 0x8000);
         }
 
         /// <summary>
@@ -215,9 +198,11 @@ namespace ACAT.Lib.Core.PanelManagement
             }
             finally
             {
-                uint threadId = GetCurrentThreadId();
-                Log.Debug("Calling TextChangedNotifications.Release AFTER Autocompeting word " + threadId + ", caretPos: " + Context.AppAgentMgr.ActiveContext().TextAgent().GetCaretPos());
+                uint threadId = Kernel32Interop.GetCurrentThreadId();
+                Log.Debug("Calling TextChangedNotifications.Release AFTER Autocompeting word");
+
                 Context.AppAgentMgr.TextChangedNotifications.Release();
+
                 Log.Debug("Returned from TextChangedNotifications.Release AFTER Autocompeting word " + threadId);
             }
         }
@@ -263,7 +248,7 @@ namespace ACAT.Lib.Core.PanelManagement
                     // if there is a preceeding sentence terminator, we have to capitalize the word
                     bool isFirstWord = context.TextAgent().IsPreviousWordAtCaretTheFirstWord();
 
-                    abbr = Context.AppAbbreviations.Lookup(word);
+                    abbr = Context.AppAbbreviationsManager.Abbreviations.Lookup(word);
 
                     // do we detect something?
                     if (abbr != null)
@@ -327,6 +312,8 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             try
             {
+                Context.AppAgentMgr.TextChangedNotifications.Hold();
+
                 using (AgentContext context = Context.AppAgentMgr.ActiveContext())
                 {
                     int caretPos = context.TextAgent().GetCaretPos();
@@ -376,14 +363,34 @@ namespace ACAT.Lib.Core.PanelManagement
             {
                 Log.Exception(ex);
             }
+            finally
+            {
+                Context.AppAgentMgr.TextChangedNotifications.Release();
+
+            }
         }
 
         /// <summary>
         /// Handles actuation of a button representing an alphanumeric character
         /// </summary>
+        /// <param name="modifiers">Modifier keys -shift, ctrl, alt</param>
+        /// <param name="inputChar">char to send</param>
         public void HandleAlphaNumericChar(ArrayList modifiers, char inputChar)
         {
             Context.AppAgentMgr.Keyboard.Send((modifiers != null) ? modifiers.Cast<Keys>().ToList() : KeyStateTracker.GetExtendedKeys(), inputChar);
+
+            KeyStateTracker.KeyTriggered(inputChar);
+
+            _lastAction = LastAction.AlphaNumeric;
+        }
+
+        /// <summary>
+        /// Handles actuation of a button representing an alphanumeric character
+        /// </summary>
+        /// <param name="inputChar">char to send</param>
+        public void HandleAlphaNumericChar(char inputChar)
+        {
+            Context.AppAgentMgr.Keyboard.Send(inputChar);
 
             KeyStateTracker.KeyTriggered(inputChar);
 
@@ -402,7 +409,10 @@ namespace ACAT.Lib.Core.PanelManagement
 
             try
             {
-                if (!isPunctuation(punctuation))
+                Context.AppAgentMgr.TextChangedNotifications.Hold();
+
+                if (!ResourceUtils.LanguageSettings().IsInsertSpaceAfterChar(punctuation) && 
+                    !ResourceUtils.LanguageSettings().IsDeletePrecedingSpacesChar(punctuation))
                 {
                     return false;
                 }
@@ -412,45 +422,45 @@ namespace ACAT.Lib.Core.PanelManagement
 
                 KeyStateTracker.ClearAlt();
                 KeyStateTracker.ClearCtrl();
-                KeyStateTracker.ClearFunc();
 
                 using (AgentContext context = Context.AppAgentMgr.ActiveContext())
                 {
-                    int offset;
-                    int count;
-
-                    // delete any spaces before the punctuation
-                    context.TextAgent().GetPrecedingWhiteSpaces(out offset, out count);
-                    Log.Debug("Preceding whitespace count: " + count);
-                    if (count > 0)
+                    if (!context.TextAgent().EnableSmartPunctuations())
                     {
-                        Log.Debug("Deleting whitespaces from offset " + offset);
-                        context.TextAgent().Delete(offset, count);
+                        Context.AppAgentMgr.Keyboard.Send((modifiers != null) ? 
+                                                            modifiers.Cast<Keys>().ToList() : 
+                                                            KeyStateTracker.GetExtendedKeys(),
+                            punctuation);
+                        _lastAction = LastAction.AlphaNumeric;
+                        return true;
                     }
 
-                    Log.Debug("Sending punctuation");
-                    Context.AppAgentMgr.Keyboard.Send((modifiers != null) ? modifiers.Cast<Keys>().ToList() : KeyStateTracker.GetExtendedKeys(), punctuation);
-
-                    // if this is a sentence terminator, add spaces
-                    // after the punctuation.
-
-                    if ("})]".LastIndexOf(punctuation) >= 0)
+                    if (ResourceUtils.LanguageSettings().IsDeletePrecedingSpacesChar(punctuation))
                     {
-                        Context.AppAgentMgr.Keyboard.Send(KeyStateTracker.GetExtendedKeys(), ' ');
-                    }
-                    else if (TextUtils.IsTerminator(punctuation))
-                    {
-                        for (int ii = 0; ii < CoreGlobals.AppPreferences.SpacesAfterPunctuation; ii++)
+                        // delete any spaces before the punctuation
+                        int offset;
+                        int count;
+                        context.TextAgent().GetPrecedingWhiteSpaces(out offset, out count);
+                        Log.Debug("Preceding whitespace count: " + count);
+                        if (count > 0)
                         {
-                            Context.AppAgentMgr.Keyboard.Send(KeyStateTracker.GetExtendedKeys(), ' ');
+                            Log.Debug("Deleting whitespaces from offset " + offset);
+                            context.TextAgent().Delete(offset, count);
                         }
                     }
 
-                    // this is important.  The ACAT talk window caretpos doesn't update until this we exit
-                    // this function.  DoEvents give a chance to the talk window to update its caret position.
-                    //Application.DoEvents();
+                    Log.Debug("Sending punctuation");
+                    Context.AppAgentMgr.Keyboard.Send((modifiers != null) ? 
+                                                        modifiers.Cast<Keys>().ToList() : 
+                                                        KeyStateTracker.GetExtendedKeys(), punctuation);
+
+                    if (ResourceUtils.LanguageSettings().IsInsertSpaceAfterChar(punctuation))
+                    {
+                        Context.AppAgentMgr.Keyboard.Send(KeyStateTracker.GetExtendedKeys(), ' ');
+                    }
 
                     _autoCompleteCaretPos = context.TextAgent().GetCaretPos();
+
                     Log.Debug("after actuating, caretpos is " + _autoCompleteCaretPos);
 
                     KeyStateTracker.KeyTriggered(punctuation);
@@ -461,6 +471,10 @@ namespace ACAT.Lib.Core.PanelManagement
             catch (Exception ex)
             {
                 Log.Exception(ex);
+            }
+            finally
+            {
+                Context.AppAgentMgr.TextChangedNotifications.Release();
             }
 
             return true;
@@ -482,8 +496,9 @@ namespace ACAT.Lib.Core.PanelManagement
                 Keys virtualKey = MapVirtualKey(value);
                 if (virtualKey != Keys.None)
                 {
-                    Context.AppAgentMgr.Keyboard.Send((modifiers != null) ? modifiers.Cast<Keys>().ToList() : KeyStateTracker.GetExtendedKeys(), virtualKey);
-                    //Context.AppAgentMgr.Keyboard.Send(KeyStateTracker.GetExtendedKeys(), virtualKey);
+                    Context.AppAgentMgr.Keyboard.Send((modifiers != null) ?
+                                                        modifiers.Cast<Keys>().ToList() : 
+                                                        KeyStateTracker.GetExtendedKeys(), virtualKey);
                     KeyStateTracker.KeyTriggered(virtualKey);
                 }
             }
@@ -540,6 +555,53 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
+        /// Deletes the previous word.  Depends on the last editing action.
+        /// If a punctuation was the last thing that was entered, it deletes
+        /// the punctuations.  If word auto-completion was the last action,
+        /// it undoes the auto-completion and restores the previously entered
+        /// partial word.  Otherwise, it just deletes the previous word.
+        /// </summary>
+        public void SmartDeletePrevWord()
+        {
+            try
+            {
+                Log.Debug("LastAction: " + _lastAction + ", currentEditingMode: " +
+                          Context.AppAgentMgr.CurrentEditingMode);
+
+                using (var context = Context.AppAgentMgr.ActiveContext())
+                {
+                    if (context.TextAgent().IsTextSelected())
+                    {
+                        context.TextAgent().Keyboard.Send(Keys.Back);
+                        _lastAction = LastAction.Unknown;
+                        return;
+                    }
+                }
+
+                switch (_lastAction)
+                {
+                    case LastAction.Punctuation:
+                        deletePreviousPunctuation();
+                        break;
+
+                    case LastAction.AutoCompleteWord:
+                        DeletePreviousWord();
+                        break;
+
+                    default:
+                        DeletePreviousWord();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+            }
+
+            _lastAction = LastAction.Unknown;
+        }
+
+        /// <summary>
         /// Auto-corrects the previous word using the active spell
         /// checker. Also handles capitalization of the first word.
         /// Call this function after a word is autocompleted or if a
@@ -590,27 +652,19 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Deletes the previous word.  Depends on the last editing action.
-        /// If a punctuation was the last thing that was entered, it deletes
-        /// the punctuations.  If word auto-completion was the last action,
-        /// it undoes the auto-completion and restores the previously entered
-        /// partial word.  Otherwise, it just deletes the previous word.
+        /// Undoes the last editing change - autocomplete word,
+        /// insert punctuation or insert a character
         /// </summary>
-        public void UndoLastAction()
+        public void UndoLastEditChange()
         {
             try
             {
                 Log.Debug("LastAction: " + _lastAction + ", currentEditingMode: " +
                           Context.AppAgentMgr.CurrentEditingMode);
 
-                using (var context = Context.AppAgentMgr.ActiveContext())
+                if (Context.AppAgentMgr.CurrentEditingMode != EditingMode.TextEntry)
                 {
-                    if (context.TextAgent().IsTextSelected())
-                    {
-                        context.TextAgent().Keyboard.Send(Keys.Back);
-                        _lastAction = LastAction.Unknown;
-                        return;
-                    }
+                    return;
                 }
 
                 switch (_lastAction)
@@ -623,8 +677,8 @@ namespace ACAT.Lib.Core.PanelManagement
                         DeletePreviousWord();
                         break;
 
-                    default:
-                        DeletePreviousWord();
+                    case LastAction.AlphaNumeric:
+                        AgentManager.Instance.Keyboard.Send(Keys.Back);
                         break;
                 }
             }
@@ -635,9 +689,6 @@ namespace ACAT.Lib.Core.PanelManagement
 
             _lastAction = LastAction.Unknown;
         }
-
-        [DllImport("kernel32.dll")]
-        private static extern uint GetCurrentThreadId();
 
         /// <summary>
         /// Handler for the event that is raised when the focus in the
@@ -665,7 +716,9 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Deletes a punctuation if it is the last previous non-whitespace character
+        /// Deletes a punctuation if it was last text entry.  If there is a space
+        /// after the punctuation, deletes the space, the punctuation itself and then
+        /// inserts a space
         /// </summary>
         private void deletePreviousPunctuation()
         {
@@ -675,11 +728,12 @@ namespace ACAT.Lib.Core.PanelManagement
                 {
                     if (Context.AppAgentMgr.CurrentEditingMode == EditingMode.TextEntry)
                     {
-                        String word;
-                        int numChars = CoreGlobals.AppPreferences.SpacesAfterPunctuation + 1;
-                        context.TextAgent().GetPrecedingCharacters(numChars, out word);
-                        Log.Debug("prev " + numChars + " chars are : [" + word + "]");
-                        if (word.Length == numChars && isPunctuation(word[0]))
+                        String precedingChars;
+
+                        int numChars = 2;  // punctuation + space after punctuation
+                        context.TextAgent().GetPrecedingCharacters(numChars, out precedingChars);
+                        Log.Debug("prev " + numChars + " chars are : [" + precedingChars + "]");
+                        if (precedingChars.Length == numChars && ResourceUtils.LanguageSettings().IsInsertSpaceAfterChar(precedingChars[0]))
                         {
                             Context.AppAgentMgr.Keyboard.Send(Keys.Back, numChars);
                             Context.AppAgentMgr.Keyboard.Send(Keys.Space);
@@ -699,17 +753,6 @@ namespace ACAT.Lib.Core.PanelManagement
             {
                 Log.Exception(ex);
             }
-        }
-
-        /// <summary>
-        /// Check if the character is a punctuation
-        /// </summary>
-        /// <param name="c">character</param>
-        /// <returns>true if it is</returns>
-        private bool isPunctuation(char c)
-        {
-            const string list = ".?!,:;@})]";
-            return list.LastIndexOf(c) >= 0;
         }
 
         /// <summary>

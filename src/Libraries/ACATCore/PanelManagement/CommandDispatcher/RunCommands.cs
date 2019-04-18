@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="RunCommands.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -96,7 +96,7 @@ namespace ACAT.Lib.Core.PanelManagement.CommandDispatcher
         }
 
         /// <summary>
-        /// Add the indicated command to the list of commands. If a
+        /// Adds the indicated command to the list of commands. If a
         /// handler for the command already exists, it is replaced
         /// </summary>
         /// <param name="runCommandHandler">Handler to add</param>

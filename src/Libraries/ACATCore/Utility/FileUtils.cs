@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="FileUtils.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,16 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.UserManagement;
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Permissions;
 using System.Text;
 using System.Threading;
-using ACAT.Lib.Core.UserManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
@@ -74,6 +39,11 @@ namespace ACAT.Lib.Core.Utility
     public class FileUtils
     {
         /// <summary>
+        /// Folder under which ACAT extensions are stored
+        /// </summary>
+        public const String ExtensionsDir = "Extensions";
+
+        /// <summary>
         /// Folder under which all ACAT assets such as
         /// images, fonts, etc are stored
         /// </summary>
@@ -84,11 +54,6 @@ namespace ACAT.Lib.Core.Utility
         /// stored
         /// </summary>
         private const String ConfigDir = "Config";
-
-        /// <summary>
-        /// Folder under which ACAT extensions are stored
-        /// </summary>
-        private const String ExtensionsDir = "Extensions";
 
         /// <summary>
         /// Folder under which all the font files are stored
@@ -108,7 +73,7 @@ namespace ACAT.Lib.Core.Utility
         /// <summary>
         /// Folder under which all the theme files are stored
         /// </summary>
-        private const String SkinsDir = "Skins";
+        private const String ThemesDir = "Themes";
 
         /// <summary>
         /// Folder in which all ACAT sounds files are stored
@@ -140,6 +105,27 @@ namespace ACAT.Lib.Core.Utility
         /// Directory where application prefernces are stored
         /// </summary>
         public static String AppPreferencesDir { get; set; }
+
+        /// <summary>
+        /// Returns true if there are multiple instances of the app
+        /// running.  This is differenct from IsACATRunning().  If the
+        /// ACAT app exits but if one of the extensions doesn't exit,
+        /// the app still remains in memory, but the mutex test in
+        /// IsACATRunning fails because the mutex has been closed.  This
+        /// can potentially allow a second instance of ACAT to be launched.
+        /// This function tests if there is another process with the current
+        /// process name
+        /// </summary>
+        /// <returns>true if so</returns>
+        public static bool AreMultipleInstancesRunning()
+        {
+            var processName = Process.GetCurrentProcess().ProcessName;
+            var processes = Process.GetProcesses();
+
+            int count = processes.Count(process => String.Compare(process.ProcessName, processName, true) == 0);
+
+            return count > 1;
+        }
 
         public static Assembly AssemblyResolve(Assembly executingAssembly, ResolveEventArgs args)
         {
@@ -220,6 +206,37 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Converts a filename from the \\Device\\HarddiskVolume1\\....\\abc.exe
+        /// format to a Dos file name
+        /// </summary>
+        /// <param name="mappedFileName">input mapped file name</param>
+        /// <returns>dos file name</returns>
+        public static String ConvertMappedFileNameToDosFileName(String mappedFileName)
+        {
+            const int bufLen = 260;
+            var fileName = String.Empty;
+
+            for (var driveLetter = 'A'; driveLetter <= 'Z'; driveLetter++)
+            {
+                var drive = driveLetter + ":";
+                var buffer = new StringBuilder(bufLen);
+                if (Kernel32Interop.QueryDosDevice(drive, buffer, buffer.Capacity) == 0)
+                {
+                    continue;
+                }
+
+                var devicePath = buffer.ToString();
+                if (mappedFileName.StartsWith(devicePath))
+                {
+                    fileName = (drive + mappedFileName.Substring(devicePath.Length));
+                    break;
+                }
+            }
+
+            return fileName;
+        }
+
+        /// <summary>
         /// Copies the spcified source to target. IF source
         /// is a folder, recursively copies source to target
         /// </summary>
@@ -257,13 +274,13 @@ namespace ACAT.Lib.Core.Utility
         /// <param name="targetDir"target dir></param>
         /// <param name="recursive">go deep recursively?</param>
         /// <returns>true on success</returns>
-        public static bool CopyDir(string srcDir, string targetDir, bool recursive)
+        public static bool CopyDir(string srcDir, string targetDir, bool recursive = true, bool overwrite = false)
         {
             bool retVal = true;
 
             try
             {
-                copyDir(srcDir, targetDir, recursive);
+                copyDir(srcDir, targetDir, recursive, overwrite);
             }
             catch
             {
@@ -297,6 +314,16 @@ namespace ACAT.Lib.Core.Utility
         public static String GetConfigFileFullPath(String xmlFileName)
         {
             return Path.Combine(SmartPath.ApplicationPath, ConfigDir, xmlFileName);
+        }
+
+        /// <summary>
+        /// Returns the default resources directory which is based on
+        /// the "English" culture (en)
+        /// </summary>
+        /// <returns>Resources dir</returns>
+        public static String GetDefaultResourcesDir()
+        {
+            return Path.Combine(ACATPath, "en");
         }
 
         /// <summary>
@@ -395,6 +422,17 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Returns the fully qualified name the file relative to
+        /// the app path
+        /// </summary>
+        /// <param name="filename">name of the settings file</param>
+        /// <returns>fully qualified path</returns>
+        public static String GetFullPathRelativeToApp(String prefName)
+        {
+            return Path.Combine(SmartPath.ApplicationPath, prefName);
+        }
+
+        /// <summary>
         /// Returns the fully qualified path to the specified image file.
         /// First checks the User's image folder.  If it doesn't find the
         /// file there, returns the path to the global ACAT images folder
@@ -426,36 +464,61 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
-        /// Returns the fully qualified name of the preferences file. The
-        /// location of the file is the same as the EXE
+        /// Returns the mapped file name of a memory mapped file
         /// </summary>
-        /// <param name="filename">name of the settings file</param>
-        /// <returns>fully qualified path</returns>
-        public static String GetPreferencesFileFullPath(String prefName)
+        /// <param name="hModule">handle to the module</param>
+        /// <returns>mapped file name</returns>
+        public static String GetMappedFileName(IntPtr hModule)
         {
-            return Path.Combine(SmartPath.ApplicationPath, prefName);
+            var mappedFileName = String.Empty;
+            const int bufLen = 260;
+
+            var buffer = new StringBuilder(bufLen);
+
+            int len = Kernel32Interop.GetMappedFileName(Kernel32Interop.GetCurrentProcess(),
+                                                        hModule,
+                                                        buffer,
+                                                        buffer.Capacity);
+            if (len != 0)
+            {
+                mappedFileName = buffer.ToString();
+            }
+
+            return mappedFileName;
+        }
+
+        /// <summary>
+        /// Returns the culture specific resources directory according to the
+        /// .NET specifications for localization directory layout.
+        /// </summary>
+        /// <returns>Resources dir</returns>
+        public static String GetResourcesDir()
+        {
+            var dirName = Path.Combine(ACATPath, Thread.CurrentThread.CurrentUICulture.Name);
+
+            return Directory.Exists(dirName) ? dirName : Path.Combine(ACATPath, Thread.CurrentThread.CurrentUICulture.TwoLetterISOLanguageName);
         }
 
         /// <summary>
         /// Returns the global ACAT themes folder
         /// </summary>
         /// <returns>fully qualified path</returns>
-        public static String GetSkinsDir()
+        public static String GetThemesDir()
         {
-            return Path.Combine(GetAssetsDir(), SkinsDir);
+            return Path.Combine(GetAssetsDir(), ThemesDir);
         }
 
         /// <summary>
         /// For the specified imaagefile, gets the fully
-        /// qualified path to it for the spcified skin
+        /// qualified path to it for the specified theme
         /// </summary>
-        /// <param name="skin">skin name</param>
+        /// <param name="theme">theme name</param>
         /// <param name="imageFile">image file name</param>
         /// <returns>full path to the image file</returns>
-        public static String GetSkinsImagePath(string skin, string imageFile)
+        public static String GetThemeImagePath(string theme, string imageFile)
         {
-            var fullPath = Path.Combine(GetUserSkinsDir(), skin, imageFile);
-            return File.Exists(fullPath) ? fullPath : Path.Combine(GetSkinsDir(), skin, imageFile);
+            var fullPath = Path.Combine(GetUserThemesDir(), theme, imageFile);
+            return File.Exists(fullPath) ? fullPath : Path.Combine(GetThemesDir(), theme, imageFile);
         }
 
         /// <summary>
@@ -468,7 +531,7 @@ namespace ACAT.Lib.Core.Utility
         public static String GetSoundPath(string soundFile)
         {
             var fullPath = Path.Combine(GetUserSoundsDir(), soundFile);
-            return File.Exists(fullPath) ? fullPath : Path.Combine(GetAssetsDir(), soundFile);
+            return File.Exists(fullPath) ? fullPath : Path.Combine(GetSoundsDir(), soundFile);
         }
 
         /// <summary>
@@ -514,9 +577,9 @@ namespace ACAT.Lib.Core.Utility
         /// current user's USER folder
         /// </summary>
         /// <returns>fully qualified path</returns>
-        public static String GetUserSkinsDir()
+        public static String GetUserThemesDir()
         {
-            return Path.Combine(UserManager.GetFullPath(AssetsDir), SkinsDir);
+            return Path.Combine(UserManager.GetFullPath(AssetsDir), ThemesDir);
         }
 
         /// <summary>
@@ -530,6 +593,16 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Returns true if an instance of any of the ACAT apps is
+        /// still running
+        /// </summary>
+        /// <returns>true if so</returns>
+        public static bool IsACATRunning()
+        {
+            return CheckAppExistingInstance("ACATMutex");
+        }
+
+        /// <summary>
         /// Checks if the specified process is running or not
         /// </summary>
         /// <param name="processName">name of the process to check</param>
@@ -539,6 +612,28 @@ namespace ACAT.Lib.Core.Utility
         {
             Process[] pname = Process.GetProcessesByName(processName);
             return pname.Length != 0;
+        }
+
+        /// <summary>
+        /// Logs assembly info to the debug output
+        /// </summary>
+        public static void LogAssemblyInfo()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+
+            // get appname and copyright information
+            object[] attributes = assembly.GetCustomAttributes(typeof(AssemblyTitleAttribute), false);
+            var appName = (attributes.Length != 0)
+                ? ((AssemblyTitleAttribute)attributes[0]).Title
+                : String.Empty;
+
+            var appVersion = "Version " + assembly.GetName().Version;
+            attributes = assembly.GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false);
+            var appCopyright = (attributes.Length != 0)
+                ? ((AssemblyCopyrightAttribute)attributes[0]).Copyright
+                : String.Empty;
+
+            Log.Info("***** " + appName + ". " + appVersion + ". " + appCopyright + " *****");
         }
 
         /// <summary>
@@ -572,6 +667,63 @@ namespace ACAT.Lib.Core.Utility
             return retVal;
         }
 
+        /// <summary>
+        /// Executes the specifed batch file
+        /// </summary>
+        /// <param name="batchFileName">name of the batch file</param>
+        /// <returns>true on success</returns>
+        public static bool RunBatchFile(String batchFileName)
+        {
+            return RunBatchFile(batchFileName, new string[0]);
+        }
+
+        /// <summary>
+        /// Runs the specified batch file
+        /// </summary>
+        /// <param name="batchFileName">name of the batch file</param>
+        /// <param name="argList">list of args</param>
+        /// <returns>true on success</returns>
+        public static bool RunBatchFile(String batchFileName, params String[] argList)
+        {
+            bool retVal = true;
+
+            try
+            {
+                var dir = AppDomain.CurrentDomain.BaseDirectory;
+                var fileName = Path.Combine(dir, batchFileName);
+                var stringBuilder = new StringBuilder();
+                foreach (var arg in argList)
+                {
+                    stringBuilder.Append("\"" + arg + "\" ");
+                }
+
+                var process = new Process
+                {
+                    StartInfo =
+                    {
+                        FileName = fileName,
+                        WorkingDirectory = dir,
+                        Arguments = stringBuilder.ToString(),
+                        UseShellExecute = true
+                    }
+                };
+
+                process.Start();
+                process.WaitForExit();
+                int exitCode = process.ExitCode;
+                process.Close();
+
+                retVal = (exitCode == 0);
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
+                retVal = false;
+            }
+
+            return retVal;
+        }
+
         [DllImport("Shlwapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern uint AssocQueryString(uint flags, uint str, string pszAssoc, string pszExtra, [Out] StringBuilder pszOut, [In][Out] ref uint pcchOut);
 
@@ -594,7 +746,7 @@ namespace ACAT.Lib.Core.Utility
         /// <param name="srcDir">source dir</param>
         /// <param name="targetDir">target dir</param>
         /// <param name="recursive">go deep recursively?</param>
-        private static void copyDir(string srcDir, string targetDir, bool recursive)
+        private static void copyDir(string srcDir, string targetDir, bool recursive = true, bool overwrite = false)
         {
             var dir = new DirectoryInfo(srcDir);
             var dirs = dir.GetDirectories();
@@ -613,14 +765,33 @@ namespace ACAT.Lib.Core.Utility
             var files = dir.GetFiles();
             foreach (var file in files)
             {
-                file.CopyTo(Path.Combine(targetDir, file.Name), false);
+                var targetFile = Path.Combine(targetDir, file.Name);
+
+                try
+                {
+                    if (File.Exists(targetFile))
+                    {
+                        if (overwrite)
+                        {
+                            file.CopyTo(targetFile, true);
+                        }
+                    }
+                    else
+                    {
+                        file.CopyTo(targetFile, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Error copying file " + file.FullName + " to " + targetFile + ", exception: " + ex);
+                }
             }
 
             if (recursive)
             {
                 foreach (var subdir in dirs)
                 {
-                    CopyDir(subdir.FullName, Path.Combine(targetDir, subdir.Name), recursive);
+                    CopyDir(subdir.FullName, Path.Combine(targetDir, subdir.Name), recursive, overwrite);
                 }
             }
         }

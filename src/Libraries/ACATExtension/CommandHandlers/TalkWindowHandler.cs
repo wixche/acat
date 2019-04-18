@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TalkWindowHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
@@ -117,8 +81,45 @@ namespace ACAT.Lib.Extension.CommandHandlers
 
                     break;
 
+                case "CmdTalkWindowShow":
+                    {
+                        // first check if a functional agent is currently active
+                        // if it is, instruct it to close and then execute the command
+                        // after it has exited
+                        IApplicationAgent agent = AgentManager.Instance.ActiveAgent;
+                        if (agent is IFunctionalAgent)
+                        {
+                            IFunctionalAgent funcAgent = (IFunctionalAgent)agent;
+                            if (funcAgent.ExitCommand == null)
+                            {
+                                funcAgent.ExitCommand = new PostExitCommand { Command = this, ContextSwitch = true };
+                                funcAgent.OnRequestClose();
+                                break;
+                            }
+                        }
+
+                        Context.AppTalkWindowManager.ShowTalkWindow();
+                        
+                    }
+                    break;
+
                 case "CmdTalkWindowClose":
                     Context.AppTalkWindowManager.CloseTalkWindow();
+                    break;
+
+                case "CmdTalkApp":
+                    var form = PanelManager.Instance.CreatePanel("TalkApplicationScanner");
+                    if (form != null)
+                    {
+                        // Add ad-hoc agent that will handle the form
+                        var agent = Context.AppAgentMgr.GetAgentByName("Talk Application Agent");
+                        if (agent != null)
+                        {
+                            Context.AppAgentMgr.AddAgent(form.Handle, agent);
+                            Context.AppPanelManager.ShowDialog(form as IPanel);
+                        }
+                    }
+
                     break;
 
                 default:

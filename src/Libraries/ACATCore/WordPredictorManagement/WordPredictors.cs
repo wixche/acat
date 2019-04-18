@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WordPredictors.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,15 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.UserManagement;
+using ACAT.Lib.Core.Utility;
+using ACAT.Lib.Core.WordPredictorManagement;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.WordPredictionManagement
 {
@@ -70,21 +39,61 @@ namespace ACAT.Lib.Core.WordPredictionManagement
     public class WordPredictors : IDisposable
     {
         /// <summary>
+        /// Name of the config file where Id's of preferred word predictors are stored
+        /// </summary>
+        private const String PreferredConfigFile = "PreferredWordPredictors.xml";
+
+        /// <summary>
+        /// Null word predictor. Doesn't do anything :-)
+        /// </summary>
+        private static IWordPredictor _nullWordPredictor = null;
+
+        /// <summary>
+        /// Table mapping the GUID and culture to the word predictor Type
+        /// </summary>
+        private readonly Dictionary<Guid, Tuple<String, Type>> _wordPredictorsTypeCache;
+
+        /// <summary>
+        /// Top level language-specific folder (eg en, fr etc)
+        /// </summary>
+        private String _dirWalkCurrentCulture;
+
+        /// <summary>
         /// Has this object been disposed
         /// </summary>
         private bool _disposed = false;
 
         /// <summary>
-        /// Table mapping the GUID to the word predictor Type
+        /// The object that holds the preferred word predictors
         /// </summary>
-        private Dictionary<Guid, Type> _wordPredictorsTypeCache;
+        private PreferredWordPredictors _preferredWordPredictors;
 
         /// <summary>
         /// Initializes an instance of the WordPredictors class
         /// </summary>
         public WordPredictors()
         {
-            _wordPredictorsTypeCache = new Dictionary<Guid, Type>();
+            _wordPredictorsTypeCache = new Dictionary<Guid, Tuple<String, Type>>();
+
+            PreferredWordPredictors.FilePath = UserManager.GetFullPath(PreferredConfigFile);
+            _preferredWordPredictors = PreferredWordPredictors.Load();
+        }
+
+        /// <summary>
+        /// Gets the null wordpredictor object
+        /// </summary>
+        public static IWordPredictor NullWordPredictor
+        {
+            get
+            {
+                if (_nullWordPredictor == null)
+                {
+                    _nullWordPredictor = new NullWordPredictor();
+                    _nullWordPredictor.Init(CultureInfo.DefaultThreadCurrentUICulture);
+                }
+
+                return _nullWordPredictor;
+            }
         }
 
         /// <summary>
@@ -92,7 +101,10 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         /// </summary>
         public ICollection<Type> Collection
         {
-            get { return _wordPredictorsTypeCache.Values; }
+            get
+            {
+                return _wordPredictorsTypeCache.Values.Select(value => value.Item2).ToList();
+            }
         }
 
         /// <summary>
@@ -107,35 +119,126 @@ namespace ACAT.Lib.Core.WordPredictionManagement
             GC.SuppressFinalize(this);
         }
 
-        public Guid GetByName(String name)
+        /// <summary>
+        /// Returns the list of word predictors for the specified language
+        /// </summary>
+        /// <param name="language">language (culture)</param>
+        /// <returns>list of word predictors</returns>
+        public ICollection<Type> Get(String language)
         {
-            foreach (Type type in _wordPredictorsTypeCache.Values)
+            var list = _wordPredictorsTypeCache.Values;
+
+            //return (from tuple in list where String.Compare(tuple.Item1, language, true) == 0 select tuple.Item2).ToList();
+
+            return (String.IsNullOrEmpty(language) || language.Length == 0) ?
+               (from tuple in list where String.IsNullOrEmpty(tuple.Item1) select tuple.Item2).ToList() :
+               (from tuple in list where String.Compare(tuple.Item1, language, true) == 0 select tuple.Item2).ToList();
+        }
+
+        /// <summary>
+        /// Returns the ID of the WordPredictor that supports the
+        /// specified culture info.  If no culture-specific word
+        /// predictor is found, Guid.Empty is returned
+        /// </summary>
+        /// <param name="ci">culture info</param>
+        /// <returns>ID of the word predictor</returns>
+        public Guid GetDefaultByCulture(CultureInfo ci)
+        {
+            Tuple<String, Type> foundTuple = null;
+
+            // first look for culture-specific word predictors
+            foreach (var tuple in _wordPredictorsTypeCache.Values)
             {
-                IDescriptor descriptor = DescriptorAttribute.GetDescriptor(type);
-                if (descriptor != null && String.Compare(descriptor.Name, name, true) == 0)
+                if (ci == null)
                 {
-                    Log.Debug("Found word predictor [" + name + "]");
+                    if (String.IsNullOrEmpty(tuple.Item1))
+                    {
+                        foundTuple = tuple;
+                        break;
+                    }
+                }
+                else if (!String.IsNullOrEmpty(tuple.Item1) &&
+                    (String.Compare(tuple.Item1, ci.Name, true) == 0) ||
+                    String.Compare(tuple.Item1, ci.TwoLetterISOLanguageName, true) == 0)
+                {
+                    foundTuple = tuple;
+                    break;
+                }
+            }
+
+            if (foundTuple != null)
+            {
+                IDescriptor descriptor = DescriptorAttribute.GetDescriptor(foundTuple.Item2);
+                if (descriptor != null)
+                {
+                    Log.Debug("Found word predictor for culture " + (ci != null ? ci.Name : "Neutral") + "[" + descriptor.Name + "]");
                     return descriptor.Id;
                 }
             }
 
-            Log.Debug("Could not find word predictor for [" + name + "]");
             return Guid.Empty;
         }
 
         /// <summary>
-        /// Recursively look into each of the extension directories looking
+        /// Returns the ID of the preferred word predictor for
+        /// the specifed culture, guid.Empty if none found
+        /// </summary>
+        /// <param name="ci">culture</param>
+        /// <returns>the guid</returns>
+        public Guid GetPreferredByCulture(CultureInfo ci)
+        {
+            return _preferredWordPredictors.GetByCulture(ci);
+        }
+
+        /// <summary>
+        /// Returns the preferred word predictor or the default word
+        /// predictor for the specified culture.  Returns guid.empty
+        /// if none found for the culture
+        /// </summary>
+        /// <param name="ci">culture</param>
+        /// <returns>id of the word predictor</returns>
+        public Guid GetPreferredOrDefaultByCulture(CultureInfo ci)
+        {
+            var guid = GetPreferredByCulture(ci);
+
+            if (Equals(guid, Guid.Empty))
+            {
+                guid = GetDefaultByCulture(ci);
+            }
+
+            return guid;
+        }
+
+        /// <summary>
+        /// Recursively looks into each of the extension directories looking
         /// for WordPredictor DLL's. If found, cache the GUID and Type.
         /// </summary>
-        /// <param name="extensionDirs"></param>
-        /// <param name="recursive"></param>
-        /// <returns></returns>
+        /// <param name="extensionDirs">Folders to search under</param>
+        /// <param name="recursive">recursively descend and search?</param>
+        /// <returns>true</returns>
         public bool Load(IEnumerable<String> extensionDirs, bool recursive = true)
         {
             foreach (string dir in extensionDirs)
             {
                 var extensionDir = dir + "\\" + WordPredictionManager.WordPredictorsRootName;
-                loadWordPredictorsTypesIntoCache(extensionDir, recursive);
+                loadWordPredictorsTypesIntoCache(extensionDir, null, recursive);
+            }
+
+            var languageDirs = ResourceUtils.GetInstalledLanugageDirectories();
+            foreach (string dir in languageDirs)
+            {
+                var extensionDir = dir + "\\" + FileUtils.ExtensionsDir;
+                var extensionsRoots = CoreGlobals.AppPreferences.Extensions.Split(',');
+                var lastIndex = dir.LastIndexOf("\\");
+                var language = dir.Substring(lastIndex + 1);
+
+                foreach (string root in extensionsRoots)
+                {
+                    var extensionRoot = Path.Combine(extensionDir, root);
+                    extensionRoot = Path.Combine(extensionRoot, WordPredictionManager.WordPredictorsRootName);
+
+                    loadWordPredictorsTypesIntoCache(extensionRoot, language, recursive);
+                }
             }
 
             return true;
@@ -148,7 +251,12 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         /// <returns></returns>
         public Type Lookup(Guid guid)
         {
-            foreach (Type type in _wordPredictorsTypeCache.Values)
+            if (Equals(guid, NullWordPredictor.Descriptor.Id))
+            {
+                return typeof(NullWordPredictor);
+            }
+
+            foreach (Type type in Collection)
             {
                 IDescriptor descriptor = DescriptorAttribute.GetDescriptor(type);
                 if (descriptor != null && Equals(guid, descriptor.Id))
@@ -163,12 +271,31 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
+        /// Sets the preferred word predictor for the
+        /// specified language
+        /// </summary>
+        /// <param name="language">language (culture)</param>
+        /// <param name="guid">id of the word predictor</param>
+        /// <returns>true on success</returns>
+        public bool SetPreferred(String language, Guid guid)
+        {
+            bool retVal = _preferredWordPredictors.SetAsDefault(language, guid);
+            if (retVal)
+            {
+                retVal = _preferredWordPredictors.Save();
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
         /// Adds the word predictor identified by the GUID and Type to
         /// the cache
         /// </summary>
-        /// <param name="guid"></param>
-        /// <param name="type"></param>
-        internal void Add(Guid guid, Type type)
+        /// <param name="guid">guid of the wp to add</param>
+        /// <param name="language">language (culture of the wp)</param>
+        /// <param name="type">the class Type of the wp</param>
+        internal void Add(Guid guid, String language, Type type)
         {
             if (_wordPredictorsTypeCache.ContainsKey(guid))
             {
@@ -177,7 +304,7 @@ namespace ACAT.Lib.Core.WordPredictionManagement
             }
 
             Log.Debug("Adding Wordpredictor " + type.FullName + ", guid " + guid.ToString() + " to cache");
-            _wordPredictorsTypeCache.Add(guid, type);
+            _wordPredictorsTypeCache.Add(guid, new Tuple<String, Type>(language, type));
         }
 
         /// <summary>
@@ -190,6 +317,11 @@ namespace ACAT.Lib.Core.WordPredictionManagement
             if (!_disposed)
             {
                 Log.Debug();
+
+                if (_nullWordPredictor != null)
+                {
+                    _nullWordPredictor.Dispose();
+                }
 
                 if (disposing)
                 {
@@ -206,11 +338,13 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         /// Recursively walks through the directory and discovers the word
         /// predictor DLL's in there and loads their Types into the cache
         /// </summary>
-        /// <param name="dir"></param>
-        /// <param name="resursive"></param>
-        private void loadWordPredictorsTypesIntoCache(String dir, bool resursive = true)
+        /// <param name="dir">dir to descend into</param>
+        /// <param name="culture">culture (optional) of the word predictor</param>
+        /// <param name="resursive">true if deep-descend</param>
+        private void loadWordPredictorsTypesIntoCache(String dir, String culture, bool resursive = true)
         {
             DirectoryWalker walker = new DirectoryWalker(dir, "*.dll");
+            _dirWalkCurrentCulture = culture;
             walker.Walk(new OnFileFoundDelegate(onFileFound));
         }
 
@@ -218,7 +352,7 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         /// Call back function for when it finds a DLL.  Load the dll and
         /// look for word predictor types in there. If found, add them to the cache
         /// </summary>
-        /// <param name="dllName"></param>
+        /// <param name="dllName">name of the dll found</param>
         private void onFileFound(String dllName)
         {
             try
@@ -231,7 +365,7 @@ namespace ACAT.Lib.Core.WordPredictionManagement
                         DescriptorAttribute attr = DescriptorAttribute.GetDescriptor(type);
                         if (attr != null && attr.Id != Guid.Empty)
                         {
-                            Add(attr.Id, type);
+                            Add(attr.Id, _dirWalkCurrentCulture, type);
                         }
                     }
                 }

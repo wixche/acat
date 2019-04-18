@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ScannerPositionSizeController.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,57 +18,21 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Windows.Forms;
-using ACAT.Lib.Core.Audit;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// Reprents a controller that controls the position
+    /// Represents a controller that controls the position
     /// and size of the scanner. Scanner sizes can be scaled
     /// up/down depending on a scale-factor.  Also the scanner
-    /// can be positioned in one of the four corners of the
-    /// primary display.
+    /// can be positioned in one of the pre-defined spots on
+    /// the display.
     /// </summary>
     public class ScannerPositionSizeController
     {
@@ -116,6 +80,17 @@ namespace ACAT.Lib.Core.PanelManagement
         private AutoPositionScanner _autoPositionScanner;
 
         /// <summary>
+        /// Should the scanner be docked to another window?
+        /// </summary>
+        private bool _dock;
+
+        /// <summary>
+        /// The DockScanner object that handles docking of the
+        /// scanner to another window
+        /// </summary>
+        private DockScanner _dockScanner;
+
+        /// <summary>
         /// Original size of the form.  The form will be scaled up
         /// or down depending on user setting
         /// </summary>
@@ -127,11 +102,14 @@ namespace ACAT.Lib.Core.PanelManagement
         private bool _prevAutoPositionScannerValue;
 
         /// <summary>
+        /// Size of the scanner before resizing commenses
+        /// </summary>
+        private Size _resizeBeginSize;
+
+        /// <summary>
         /// Root widget that represents the scanner form
         /// </summary>
         private Widget _rootWidget;
-
-        private bool _savePositionOnAutoPositionStop;
 
         /// <summary>
         /// Initializes a new instance of the class.
@@ -140,11 +118,16 @@ namespace ACAT.Lib.Core.PanelManagement
         internal ScannerPositionSizeController(ScannerCommon scannerCommon)
         {
             AutoPosition = true;
+            ManualPosition = Context.AppWindowPosition;
             _prevAutoPositionScannerValue = AutoPosition;
             ScaleFactor = ScaleFactorInit;
             _scannerCommon = scannerCommon;
             _form = scannerCommon.ScannerForm;
+            _dock = false;
             _form.LocationChanged += FormOnLocationChanged;
+            _form.ResizeEnd += _form_ResizeEnd;
+            _form.ResizeBegin += FormOnResizeBegin;
+            _form.Shown += _form_Shown;
         }
 
         /// <summary>
@@ -153,10 +136,18 @@ namespace ACAT.Lib.Core.PanelManagement
         public event EventHandler EvtAutoRepositionScannerStop;
 
         /// <summary>
-        ///  Whether to position the screen app controlled or by previous
-        ///  setting
+        /// Gets or sets whether the position of the scanner is in
+        /// the default position or whether the caller is going to
+        /// manually position the scanner.
         /// </summary>
         public bool AutoPosition { get; set; }
+
+        /// <summary>
+        /// Gets or sets the manual position of the scanner.  If AutoPosition
+        /// is Off then, the scanner is positioned in the ManualPosition spot
+        /// on the display.
+        /// </summary>
+        public Windows.WindowPosition ManualPosition { get; set; }
 
         /// <summary>
         /// Gets or sets the scaler factor
@@ -167,12 +158,10 @@ namespace ACAT.Lib.Core.PanelManagement
         /// Starts timer-based auto-positioning of the scanner. On
         /// each tick, the scanner is positioned in the next corner
         /// </summary>
-        public void AutoRepositionScannerStart(bool savePositionOnStop = true)
+        public void AutoRepositionScannerStart()
         {
             unsubscribeAndDisposeAutoPositionScanner();
-            _savePositionOnAutoPositionStop = savePositionOnStop;
             _autoPositionScanner = new AutoPositionScanner(_form);
-            _scannerCommon.StatusBarController.UpdateLockStatus(false);
             _autoPositionScanner.EvtAutoPostionScannerStopped += _autoPostionScanner_EvtAutoPostionScannerStopped;
             _prevAutoPositionScannerValue = AutoPosition;
             AutoPosition = false;
@@ -185,21 +174,23 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void AutoSetPosition()
         {
-            if (AutoPosition)
-            {
-                Windows.SetWindowPosition(_form, Context.AppWindowPosition);
-            }
+            Windows.SetWindowPosition(_form, AutoPosition ? Context.AppWindowPosition : ManualPosition);
         }
 
         /// <summary>
-        /// Sets the position of the scanner and raises event to notify
-        /// that the position has changed
+        /// Docks the scanner to another window (the parent parameter)
         /// </summary>
-        public void AutoSetPositionAndNotify()
+        /// <param name="parent">window to dock to</param>
+        /// <param name="position">relative position of docking</param>
+        public void DockScanner(IntPtr parent, Windows.WindowPosition position)
         {
-            if (AutoPosition)
+            _dock = true;
+            AutoPosition = false;
+
+            _dockScanner = new DockScanner(parent, _form, position);
+            if (Windows.GetVisible(_form))
             {
-                Windows.SetWindowPositionAndNotify(_form, Context.AppWindowPosition);
+                _dockScanner.Dock();
             }
         }
 
@@ -208,7 +199,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Initialize()
         {
-            _rootWidget = _scannerCommon.GetRootWidget();
+            _rootWidget = _scannerCommon.RootWidget;
         }
 
         /// <summary>
@@ -217,6 +208,12 @@ namespace ACAT.Lib.Core.PanelManagement
         public void OnClosing()
         {
             unsubscribeAndDisposeAutoPositionScanner();
+
+            if (_dock && _dockScanner != null)
+            {
+                _dockScanner.Dispose();
+                _dock = false;
+            }
         }
 
         /// <summary>
@@ -228,30 +225,54 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Restore default size and position of the scanner.
+        /// Restores default size and position of the scanner.
         /// </summary>
         public void RestoreDefaults()
         {
-            Log.Debug("Enter");
             ScaleFactor = 1.0f;
             ScaleForm(ScaleFactor);
-            Windows.SetWindowPositionAndNotify(_form, Windows.WindowPosition.TopRight);
-            Log.Debug("Exit");
+            AutoPosition = true;
+            Context.AppWindowPosition = Windows.WindowPosition.MiddleRight;
+            Windows.SetWindowPositionAndNotify(_form, Context.AppWindowPosition);
+        }
+
+        /// <summary>
+        /// Saves the current scale factor setting
+        /// </summary>
+        public void SaveScaleSetting(Preferences prefs)
+        {
+            Log.Debug("saving scale factor. _scaleFactor=" + ScaleFactor);
+            prefs.ScannerScaleFactor = CoreGlobals.AppPreferences.ScannerScaleFactor = Convert.ToInt16(ScaleFactor * IntMultiplier);
+            prefs.Save();
+            CoreGlobals.AppPreferences.NotifyPreferencesChanged();
+            Log.Debug("scale factor saved is:" + prefs.ScannerScaleFactor);
         }
 
         /// <summary>
         /// Saves the current position and size to the preferences file
         /// </summary>
-        public void SaveSettings()
+        public void SaveSettings(Preferences prefs)
         {
-            Log.Debug("Enter");
             Log.Debug("saving scale factor. _scaleFactor=" + ScaleFactor);
-            CoreGlobals.AppPreferences.ScannerScaleFactor = Convert.ToInt16(ScaleFactor * IntMultiplier);
+            prefs.ScannerScaleFactor = CoreGlobals.AppPreferences.ScannerScaleFactor = Convert.ToInt16(ScaleFactor * IntMultiplier);
             Log.Debug("Saving window position as " + Context.AppWindowPosition);
-            CoreGlobals.AppPreferences.ScannerPosition = Context.AppWindowPosition;
-            CoreGlobals.AppPreferences.Save();
-            Log.Debug("scale factor saved is:" + CoreGlobals.AppPreferences.ScannerScaleFactor);
-            Log.Debug("Exit");
+            prefs.ScannerPosition = CoreGlobals.AppPreferences.ScannerPosition = Context.AppWindowPosition;
+            prefs.Save();
+
+            AutoPosition = true; 
+
+            CoreGlobals.AppPreferences.NotifyPreferencesChanged();
+            Log.Debug("scale factor saved is:" + prefs.ScannerScaleFactor);
+        }
+
+        /// <summary>
+        /// Sets the default scale factor
+        /// </summary>
+        public void ScaleDefault()
+        {
+            ScaleFactor = 1.0f;
+            ScaleForm(ScaleFactor);
+            SetPositionAndNotify();
         }
 
         /// <summary>
@@ -259,16 +280,13 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void ScaleDown()
         {
-            Log.Debug("Enter");
             Log.Debug("scaling down. _scaleFactor=" + ScaleFactor + " SCALE_FACTOR_MINIMUM=" + ScaleFactorMinimum);
             if (ScaleFactor > ScaleFactorMinimum)
             {
                 ScaleFactor = ScaleFactor - ScaleFactorAmount;
                 ScaleForm(ScaleFactor);
-                Windows.SetWindowPositionAndNotify(_form, Context.AppWindowPosition);
+                SetPositionAndNotify();
             }
-
-            Log.Debug("Exit");
         }
 
         /// <summary>
@@ -280,28 +298,27 @@ namespace ACAT.Lib.Core.PanelManagement
             ScaleForm(ScaleFactor);
         }
 
+
+
         /// <summary>
         /// Scales the scanner to indicated scale factor
         /// </summary>
         /// <param name="scaleFactor">the scale factor</param>
         public void ScaleForm(float scaleFactor)
         {
-            Log.Debug("Enter");
-            _form.Invoke(new MethodInvoker(delegate
-            {
-                Log.Debug("scaleFactor: " + scaleFactor);
+            Log.Debug("Enter. scaleFactor: " + scaleFactor);
 
-                _form.SuspendLayout();
+            var newSize = new Size(Convert.ToInt32(_originalSize.Width * scaleFactor), Convert.ToInt32(_originalSize.Height * scaleFactor));
 
-                var newSize = new Size(Convert.ToInt32(_originalSize.Width * scaleFactor), Convert.ToInt32(_originalSize.Height * scaleFactor));
+            Log.Debug(_form.Name + "," + "scalefactor: " + scaleFactor + 
+                        "orig/new width: " + _originalSize.Width + ", " + newSize.Width + 
+                        "orig/new height: " + _originalSize.Height + ", " + newSize.Height);
 
-                Log.Debug("scalefactor: " + scaleFactor + " newFormWidth: " + newSize.Width);
-                _rootWidget.Dump();
-                _rootWidget.SetScaleFactor(scaleFactor);
-                _form.Size = newSize;
-                _form.Invalidate();
-                _form.ResumeLayout();
-            }));
+            //_rootWidget.Dump();
+
+            _rootWidget.SetScaleFactor(scaleFactor);
+            _form.Size = newSize;
+
             Log.Debug("Exit");
         }
 
@@ -316,10 +333,19 @@ namespace ACAT.Lib.Core.PanelManagement
             {
                 ScaleFactor = ScaleFactor + ScaleFactorAmount;
                 ScaleForm(ScaleFactor);
-                Windows.SetWindowPositionAndNotify(_form, Context.AppWindowPosition);
+                SetPositionAndNotify();
             }
 
             Log.Debug("Exit");
+        }
+
+        /// <summary>
+        /// Sets the position of the scanner and raises event to notify
+        /// that the position has changed
+        /// </summary>
+        public void SetPositionAndNotify()
+        {
+            Windows.SetWindowPositionAndNotify(_form, AutoPosition ? Context.AppWindowPosition : ManualPosition);
         }
 
         /// <summary>
@@ -331,18 +357,61 @@ namespace ACAT.Lib.Core.PanelManagement
         private void _autoPostionScanner_EvtAutoPostionScannerStopped(object sender, EventArgs e)
         {
             AutoPosition = _prevAutoPositionScannerValue;
-            if (_savePositionOnAutoPositionStop)
-            {
-                CoreGlobals.AppPreferences.ScannerPosition = Context.AppWindowPosition;
-                AuditLog.Audit(new AuditEvent("ScannerPositionChange", Context.AppWindowPosition.ToString()));
-                CoreGlobals.AppPreferences.Save();
-            }
-
-            _scannerCommon.StatusBarController.UpdateLockStatus(CoreGlobals.AppPreferences.AutoSaveScannerLastPosition);
 
             if (EvtAutoRepositionScannerStop != null)
             {
                 EvtAutoRepositionScannerStop(this, new EventArgs());
+            }
+        }
+
+        /// <summary>
+        /// Form resizing ends. Adjust the height/width
+        /// to maintain the aspect ratio to the one set at
+        /// design time
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void _form_ResizeEnd(object sender, EventArgs e)
+        {
+            Log.Debug("Formwidth: " + _form.Width + ", originalWidth: " + _originalSize.Width);
+
+            float aspectRatio = (float)_originalSize.Width / _originalSize.Height;
+            float scaleFactor = 0.0f;
+
+            if (_form.Width != _resizeBeginSize.Width)
+            {
+                _form.Height = (int)(_form.Width / aspectRatio);
+
+                scaleFactor = (float)_form.Width / _originalSize.Width;
+            }
+            else if (_form.Height != _resizeBeginSize.Height)
+            {
+                _form.Width = (int)(_form.Height * aspectRatio);
+
+                scaleFactor = (float)_form.Height / _originalSize.Height;
+            }
+
+            if (scaleFactor != 0.0f)
+            {
+                ScaleForm(scaleFactor);
+            }
+        }
+
+        /// <summary>
+        /// Event handler for when the scanner is shown. Dock it if
+        /// necesary otherwise just position it
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void _form_Shown(object sender, EventArgs e)
+        {
+            if (_dock && _dockScanner != null)
+            {
+                _dockScanner.Dock();
+            }
+            else
+            {
+                SetPositionAndNotify();
             }
         }
 
@@ -355,8 +424,19 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             if (AutoPosition)
             {
-                AutoSetPosition();
+                //AutoSetPosition();
             }
+        }
+
+        /// <summary>
+        /// User started to resize the form. Stores the
+        /// initial size of the form
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="eventArgs">event args</param>
+        private void FormOnResizeBegin(object sender, EventArgs eventArgs)
+        {
+            _resizeBeginSize = _form.Size;
         }
 
         /// <summary>

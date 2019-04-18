@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ClientConnHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.InputActuators
 {
@@ -191,6 +155,29 @@ namespace ACAT.Lib.Core.InputActuators
         }
 
         /// <summary>
+        /// Sends a string message to a network stream client.
+        /// </summary>
+        /// <param name="message">The message to send.</param>
+        /// <param name="count">number of bytes to send</param>
+        /// <returns>true on success</returns>
+        public bool SendToClient(byte[] message, int count)
+        {
+            NetworkStream stream = tcpClient.GetStream();
+
+            try
+            {
+                stream.Write(message, 0, count);
+                stream.Flush();
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Exception(e);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Thread method to read messages from the client and
         /// dispatch them to be parsed, processed and distributed.
         /// </summary>
@@ -268,29 +255,6 @@ namespace ACAT.Lib.Core.InputActuators
                 }
             }
             // free some native resources if applicable.
-        }
-
-        /// <summary>
-        /// Sends a string message to a network stream client.
-        /// </summary>
-        /// <param name="message">The message to send.</param>
-        /// <param name="count">number of bytes to send</param>
-        /// <returns>true on success</returns>
-        protected bool SendToClient(byte[] message, int count)
-        {
-            NetworkStream stream = tcpClient.GetStream();
-
-            try
-            {
-                stream.Write(message, 0, count);
-                stream.Flush();
-                return true;
-            }
-            catch (Exception e)
-            {
-                Log.Exception(e);
-                return false;
-            }
         }
 
         /// <summary>

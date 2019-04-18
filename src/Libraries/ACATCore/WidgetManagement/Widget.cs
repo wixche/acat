@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Widget.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,61 +18,25 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Interpreter;
+using ACAT.Lib.Core.ThemeManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Xml;
-using ACAT.Lib.Core.Interpreter;
-using ACAT.Lib.Core.ThemeManagement;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.WidgetManagement
 {
     /// <summary>
-    /// Used for widget notification events (eg actuation, child added)
+    /// For the event to indicate that the widget highlight turned off
     /// </summary>
-    /// <param name="sender">event sender</param>
-    /// <param name="e">event arguments</param>
-    public delegate void WidgetEventDelegate(object sender, WidgetEventArgs e);
+    /// <param name="widget">source widget</param>
+    /// <param name="handled">did the subscirber handle it?</param>
+    public delegate void HighlightOffDelegate(Widget widget, out bool handled);
 
     /// <summary>
     /// For the event to indicate that the widget highlight turned on
@@ -82,11 +46,11 @@ namespace ACAT.Lib.Core.WidgetManagement
     public delegate void HighlightOnDelegate(Widget widget, out bool handled);
 
     /// <summary>
-    /// For the event to indicate that the widget highlight turned off
+    /// Used for widget notification events (eg actuation, child added)
     /// </summary>
-    /// <param name="widget">source widget</param>
-    /// <param name="handled">did the subscirber handle it?</param>
-    public delegate void HighlightOffDelegate(Widget widget, out bool handled);
+    /// <param name="sender">event sender</param>
+    /// <param name="e">event arguments</param>
+    public delegate void WidgetEventDelegate(object sender, WidgetEventArgs e);
 
     /// <summary>
     /// This is the base class for all the UI widgets in
@@ -117,24 +81,14 @@ namespace ACAT.Lib.Core.WidgetManagement
         protected GraphicsPath graphicsPath;
 
         /// <summary>
-        /// Name of the widget
-        /// </summary>
-        protected String widgetName;
-
-        /// <summary>
         /// Is this widget being disposed
         /// </summary>
         protected bool isDisposing;
 
         /// <summary>
-        /// The layout that this widget is a part of
+        /// Name of the widget
         /// </summary>
-        private Layout _layout;
-
-        /// <summary>
-        /// Has this object been disposed off yet?
-        /// </summary>
-        private bool _disposed;
+        protected String widgetName;
 
         /// <summary>
         /// List of widgets that have the 'contextual' attribute
@@ -149,9 +103,19 @@ namespace ACAT.Lib.Core.WidgetManagement
         private readonly WidgetFinder _finder;
 
         /// <summary>
+        /// Has this object been disposed off yet?
+        /// </summary>
+        private bool _disposed;
+
+        /// <summary>
         /// Is this widget enabled or not
         /// </summary>
         private bool _enabled;
+
+        /// <summary>
+        /// The layout that this widget is a part of
+        /// </summary>
+        private Layout _layout;
 
         /// <summary>
         /// Initializes an instance of the widget class
@@ -163,7 +127,9 @@ namespace ACAT.Lib.Core.WidgetManagement
 
             _children = new List<Widget>();
 
+            Visible = true;
             Value = String.Empty;
+            Command = String.Empty;
             SubClass = String.Empty;
             Panel = String.Empty;
 
@@ -173,6 +139,7 @@ namespace ACAT.Lib.Core.WidgetManagement
             _layout = null;
             Parent = null;
 
+            IsCommand = false;
             AddForAnimation = true;
             IsHighlightOn = false;
             DrawBorder = false;
@@ -210,6 +177,11 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
+        /// Event raised which this widget is actuated
+        /// </summary>
+        public event WidgetEventDelegate EvtActuated;
+
+        /// <summary>
         /// Event raised when a child is added to
         /// this widget
         /// </summary>
@@ -217,14 +189,9 @@ namespace ACAT.Lib.Core.WidgetManagement
         public event WidgetEventDelegate EvtChildAdded;
 
         /// <summary>
-        /// Event raised which this widget is actuated
+        /// Event raised when the widget is unhighlighted
         /// </summary>
-        public event WidgetEventDelegate EvtActuated;
-
-        /// <summary>
-        /// Event raised when the widget value changes
-        /// </summary>
-        public event WidgetEventDelegate EvtValueChanged;
+        public event HighlightOffDelegate EvtHighlightOff;
 
         /// <summary>
         /// Event raised when the widget is highlighlighted
@@ -232,14 +199,14 @@ namespace ACAT.Lib.Core.WidgetManagement
         public event HighlightOnDelegate EvtHighlightOn;
 
         /// <summary>
-        /// Event raised when the widget is unhighlighted
-        /// </summary>
-        public event HighlightOffDelegate EvtHighlightOff;
-
-        /// <summary>
         /// Raised when a mouse click is detected
         /// </summary>
         public event WidgetEventDelegate EvtMouseClicked;
+
+        /// <summary>
+        /// Event raised when the widget value changes
+        /// </summary>
+        public event WidgetEventDelegate EvtValueChanged;
 
         /// <summary>
         /// The enabled states the widget can be in.
@@ -264,31 +231,81 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Gets the parent of this widget (null if no parent)
+        /// Should this widget be added for animations?
         /// </summary>
-        public Widget Parent { get; internal set; }
+        public bool AddForAnimation { get; protected set; }
 
         /// <summary>
-        /// Gets the .NET UI control object that represents (e.g
-        /// Label, Button etc
-        /// this widget
+        /// Gets normal background color.  Uses layout
+        /// color scheme if this widget doesn't have a specific one
         /// </summary>
-        public Control UIControl { get; protected set; }
+        public Color BackgroundColor
+        {
+            get
+            {
+                if (Enabled)
+                {
+                    return (Colors != null) ?
+                            Colors.Background :
+                            WidgetLayout.Colors.Background;
+                }
+
+                return (DisabledButtonColors != null) ?
+                        DisabledButtonColors.Background :
+                        WidgetLayout.DisabledButtonColors.Background;
+            }
+        }
 
         /// <summary>
-        /// Gets or sets the string value of the widget
+        /// Gets background image to be used in the unhighlighted state
         /// </summary>
-        public String Value { get; set; }
+        public Image BackgroundImage
+        {
+            get
+            {
+                if (Enabled)
+                {
+                    return (Colors != null) ?
+                            Colors.BackgroundImage :
+                            WidgetLayout.Colors.BackgroundImage;
+                }
+
+                return (DisabledButtonColors != null) ?
+                        DisabledButtonColors.BackgroundImage :
+                        WidgetLayout.DisabledButtonColors.BackgroundImage;
+            }
+        }
 
         /// <summary>
-        /// Gets or sets the widget subclass.
+        /// Returns an array of children
         /// </summary>
-        public String SubClass { get; set; }
+        public IEnumerable<Widget> Children
+        {
+            get { return _children; }
+        }
 
         /// <summary>
         /// Default color scheme can be overriden for a widget
         /// </summary>
         public ColorScheme Colors { get; set; }
+
+        /// <summary>
+        /// Gets the command (if any) associated with this widget.
+        /// All commands begin with the @ symbol.  If the value of
+        /// this widget begins with @, it is a command
+        /// </summary>
+        public String Command { get; internal set; }
+
+        /// <summary>
+        /// Returns all the contextual widgets.  Contextual widgets
+        /// are those whose enabled state is set to "contextual".
+        /// </summary>
+        public IEnumerable ContextualWidgets
+        {
+            get { return _contextualWidgets; }
+        }
+
+        public bool DefaultEnabled { get; set; }
 
         /// <summary>
         /// Gets or sets the colorscheme for the widget when it
@@ -297,67 +314,9 @@ namespace ACAT.Lib.Core.WidgetManagement
         public ColorScheme DisabledButtonColors { get; set; }
 
         /// <summary>
-        /// Gets or sets User data associated with the widget
-        /// </summary>
-        public object UserData { get; set; }
-
-        /// <summary>
-        /// Should this widget be added for animations?
-        /// </summary>
-        public bool AddForAnimation { get; protected set; }
-
-        /// <summary>
-        /// Gets or sets the xml node of the layout in the screen
-        /// config file
-        /// </summary>
-        public XmlNode LayoutXmlNode { get; set; }
-
-        /// <summary>
-        /// Is the highlight on for this widget?
-        /// </summary>
-        public bool IsHighlightOn { get; protected set; }
-
-        /// <summary>
-        /// Is selected highlight on for this widget?
-        /// </summary>
-        public bool IsSelectedHighlightOn { get; protected set; }
-
-        /// <summary>
         /// Should we draw a border around this control?
         /// </summary>
         public bool DrawBorder { get; private set; }
-
-        /// <summary>
-        /// Gets or sets the panel type of the widget.  This
-        /// is applicable to scanners.
-        /// </summary>
-        public String Panel { get; private set; }
-
-        public bool DefaultEnabled { get; set; }
-
-        /// <summary>
-        /// Gets the name of the widget.
-        /// </summary>
-        public String Name
-        {
-            get { return widgetName; }
-        }
-
-        /// <summary>
-        /// Gets the width of the widget
-        /// </summary>
-        public virtual int Width
-        {
-            get { return (UIControl != null) ? UIControl.Width : 0; }
-        }
-
-        /// <summary>
-        /// Gets the height of the widget
-        /// </summary>
-        public virtual int Height
-        {
-            get { return (UIControl != null) ? UIControl.Height : 0; }
-        }
 
         /// <summary>
         /// Gets or sets the 'enabled' state of the widget and all
@@ -414,101 +373,6 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Returns an array of children
-        /// </summary>
-        public IEnumerable<Widget> Children
-        {
-            get { return _children; }
-        }
-
-        /// <summary>
-        /// Returns all the contextual widgets.  Contextual widgets
-        /// are those whose enabled state is set to "contextual".
-        /// </summary>
-        public IEnumerable ContextualWidgets
-        {
-            get { return _contextualWidgets; }
-        }
-
-        /// <summary>
-        /// Returns whether a mouse click needs to be detected
-        /// </summary>
-        public bool IsMouseClickActuateOn
-        {
-            get
-            {
-                if (this is IButtonWidget)
-                {
-                    IButtonWidget button = (IButtonWidget)this;
-                    return (button.GetWidgetAttribute() != null) && button.GetWidgetAttribute().MouseClickActuate;
-                }
-
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Gets the PCode for the mouse click event. null if none
-        /// has been defined.
-        /// </summary>
-        public PCode OnMouseClick
-        {
-            get
-            {
-                if (this is IButtonWidget)
-                {
-                    IButtonWidget button = (IButtonWidget)this;
-                    return (button.GetWidgetAttribute() != null) ?
-                            button.GetWidgetAttribute().OnMouseClick :
-                            null;
-                }
-
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Gets normal background color.  Uses layout
-        /// color scheme if this widget doesn't have a specific one
-        /// </summary>
-        public Color BackgroundColor
-        {
-            get
-            {
-                if (Enabled)
-                {
-                    return (Colors != null) ?
-                            Colors.Background :
-                            WidgetLayout.Colors.Background;
-                }
-
-                return (DisabledButtonColors != null) ?
-                        DisabledButtonColors.Background :
-                        WidgetLayout.DisabledButtonColors.Background;
-            }
-        }
-
-        /// <summary>
-        /// Gets background image to be used in the unhighlighted state
-        /// </summary>
-        public Image BackgroundImage
-        {
-            get
-            {
-                if (Enabled)
-                {
-                    return (Colors != null) ?
-                            Colors.BackgroundImage :
-                            WidgetLayout.Colors.BackgroundImage;
-                }
-
-                return (DisabledButtonColors != null) ?
-                        DisabledButtonColors.BackgroundImage :
-                        WidgetLayout.DisabledButtonColors.BackgroundImage;
-            }
-        }
-
-        /// <summary>
         /// Gets normal foreground color.  Uses layout
         /// color scheme if this widget doesn't have a specific one
         /// </summary>
@@ -527,6 +391,14 @@ namespace ACAT.Lib.Core.WidgetManagement
                         DisabledButtonColors.Foreground :
                         WidgetLayout.DisabledButtonColors.Foreground;
             }
+        }
+
+        /// <summary>
+        /// Gets the height of the widget
+        /// </summary>
+        public virtual int Height
+        {
+            get { return (UIControl != null) ? UIControl.Height : 0; }
         }
 
         /// <summary>
@@ -655,6 +527,110 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
+        /// Gets whether this widget has
+        /// </summary>
+        public bool IsCommand { get; internal set; }
+
+        /// <summary>
+        /// Is the highlight on for this widget?
+        /// </summary>
+        public bool IsHighlightOn { get; protected set; }
+
+        /// <summary>
+        /// Returns whether a mouse click needs to be detected
+        /// </summary>
+        public bool IsMouseClickActuateOn
+        {
+            get
+            {
+                if (this is IButtonWidget)
+                {
+                    IButtonWidget button = (IButtonWidget)this;
+                    return (button.GetWidgetAttribute() != null) && button.GetWidgetAttribute().MouseClickActuate;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Is selected highlight on for this widget?
+        /// </summary>
+        public bool IsSelectedHighlightOn { get; protected set; }
+
+        /// <summary>
+        /// Gets or sets the xml node of the layout in the Panel
+        /// config file
+        /// </summary>
+        public XmlNode LayoutXmlNode { get; set; }
+
+        /// <summary>
+        /// Gets the name of the widget.
+        /// </summary>
+        public String Name
+        {
+            get { return widgetName; }
+        }
+
+        /// <summary>
+        /// Gets the PCode for the mouse click event. null if none
+        /// has been defined.
+        /// </summary>
+        public PCode OnMouseClick
+        {
+            get
+            {
+                if (this is IButtonWidget)
+                {
+                    IButtonWidget button = (IButtonWidget)this;
+                    return (button.GetWidgetAttribute() != null) ?
+                            button.GetWidgetAttribute().OnMouseClick :
+                            null;
+                }
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the panel type of the widget.  This
+        /// is applicable to scanners.
+        /// </summary>
+        public String Panel { get; private set; }
+
+        /// <summary>
+        /// Gets the parent of this widget (null if no parent)
+        /// </summary>
+        public Widget Parent { get; internal set; }
+
+        /// <summary>
+        /// Gets or sets the widget subclass.
+        /// </summary>
+        public String SubClass { get; set; }
+
+        /// <summary>
+        /// Gets the .NET UI control object that represents (e.g
+        /// Label, Button etc
+        /// this widget
+        /// </summary>
+        public Control UIControl { get; protected set; }
+
+        /// <summary>
+        /// Gets or sets User data associated with the widget
+        /// </summary>
+        public object UserData { get; set; }
+
+        /// <summary>
+        /// Gets or sets the string value of the widget
+        /// </summary>
+        public String Value { get; set; }
+
+        /// <summary>
+        /// Gets or sets the visible attribute
+        /// </summary>
+        public virtual bool Visible { get; set; }
+
+        /// <summary>
         ///  Gets the parent layout object
         /// </summary>
         public Layout WidgetLayout
@@ -663,72 +639,34 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Recursively sets the scale factor to make the widget
-        /// larger or smaller
+        /// Gets the width of the widget
         /// </summary>
-        /// <param name="newScaleFactor"></param>
-        public virtual void SetScaleFactor(float newScaleFactor)
+        public virtual int Width
         {
-            if (_children.Count != 0)
-            {
-                foreach (Widget child in _children)
-                {
-                    // set scale factor for each child widget
-                    child.SetScaleFactor(newScaleFactor);
-                }
-            }
+            get { return (UIControl != null) ? UIControl.Width : 0; }
         }
 
         /// <summary>
-        /// Dispose off the widget, release resources
+        /// Widget was actuated.  Trigger an event to inform
+        /// the subscribers about this
         /// </summary>
-        public void Dispose()
+        public virtual void Actuate()
         {
-            isDisposing = true;
+            Log.Debug(widgetName);
 
-            Dispose(true);
-
-            // Prevent finalization code for this object
-            // from executing a second time.
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Load widget-specific xml data.  Reads widget attributes
-        /// from the xml file
-        /// </summary>
-        /// <param name="node"></param>
-        public virtual void Load(XmlNode node)
-        {
-            SubClass = XmlUtils.GetXMLAttrString(node, "subclass");
-            String colorScheme = XmlUtils.GetXMLAttrString(node, "colorScheme");
-            if (!String.IsNullOrEmpty(colorScheme))
+            if (!Enabled)
             {
-                Colors = ThemeManager.Instance.ActiveTheme.Colors.GetColorScheme(colorScheme);
+                Log.Debug(widgetName + " is not enabled.  Will not actuate");
             }
-
-            colorScheme = XmlUtils.GetXMLAttrString(node, "disabledButtonColorScheme");
-            if (!String.IsNullOrEmpty(colorScheme))
+            else if (EvtActuated != null)
             {
-                DisabledButtonColors = ThemeManager.Instance.ActiveTheme.Colors.GetColorScheme(colorScheme);
+                Log.Debug("EvtActuated is not null.  Calling actuate for " + widgetName);
+                EvtActuated(this, new WidgetEventArgs(this));
             }
-
-            DrawBorder = XmlUtils.GetXMLAttrBool(node, "drawBorder", DrawBorder);
-
-            Panel = XmlUtils.GetXMLAttrString(node, "panel");
-
-            EnabledState = parseEnabledValue(XmlUtils.GetXMLAttrString(node, "enabled", "true"));
-
-            DefaultEnabled = XmlUtils.GetXMLAttrBool(node, "defaultEnabled", false);
-
-            Enabled = true;
-        }
-
-        /// <summary>
-        /// Called after all the children for this widget have been loaded
-        /// </summary>
-        public virtual void PostLoad()
-        {
+            else
+            {
+                Log.Debug("EvtActuated is null for " + widgetName);
+            }
         }
 
         /// <summary>
@@ -787,6 +725,30 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
+        /// Checks if at least on child of this widget can
+        /// be added for animation. Override this behavior for
+        /// specific derived class behavior
+        /// </summary>
+        /// <returns>True if can</returns>
+        public virtual bool CanAddForAnimation()
+        {
+            bool retVal = AddForAnimation;
+            if (!retVal)
+            {
+                foreach (Widget child in _children)
+                {
+                    retVal = child.CanAddForAnimation();
+                    if (retVal)
+                    {
+                        break;
+                    }
+                }
+            }
+            //Log.Debug("WidgetName: " + Name + ", retVal : " + retVal);
+            return retVal;
+        }
+
+        /// <summary>
         /// Disposes off all the child widgets and clears
         /// the list of children
         /// </summary>
@@ -798,6 +760,60 @@ namespace ACAT.Lib.Core.WidgetManagement
             }
 
             _children.Clear();
+        }
+
+        /// <summary>
+        /// Dispose off the widget, release resources
+        /// </summary>
+        public void Dispose()
+        {
+            isDisposing = true;
+
+            Dispose(true);
+
+            // Prevent finalization code for this object
+            // from executing a second time.
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Recursively prints the name of this widget and all its children
+        /// </summary>
+        public void Dump()
+        {
+            Log.Debug("Widget Name: " + Name);
+
+            if (_children.Count == 0)
+            {
+                return;
+            }
+
+            foreach (Widget child in _children)
+            {
+                child.Dump();
+            }
+        }
+
+        /// <summary>
+        /// Returns the text value of the widget.
+        /// </summary>
+        public virtual String GetText()
+        {
+            return (UIControl != null) ? Windows.GetText(UIControl) : String.Empty;
+        }
+
+        /// <summary>
+        /// Hide this widget
+        /// </summary>
+        public void Hide()
+        {
+            if (UIControl != null)
+            {
+                Windows.SetVisible(UIControl, false);
+            }
+
+            Visible = false;
+            AddForAnimation = false;
         }
 
         /// <summary>
@@ -814,7 +830,7 @@ namespace ACAT.Lib.Core.WidgetManagement
             {
                 if (_layout.RootWidget.UIControl.InvokeRequired)
                 {
-                    _layout.RootWidget.UIControl.Invoke(new MethodInvoker(delegate()
+                    _layout.RootWidget.UIControl.Invoke(new MethodInvoker(delegate
                     {
                         highlightOff();
                     }));
@@ -857,6 +873,64 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
+        /// Load widget-specific xml data.  Reads widget attributes
+        /// from the xml file
+        /// </summary>
+        /// <param name="node"></param>
+        public virtual void Load(XmlNode node)
+        {
+            SubClass = XmlUtils.GetXMLAttrString(node, "subclass");
+            String colorScheme = XmlUtils.GetXMLAttrString(node, "colorScheme");
+            if (!String.IsNullOrEmpty(colorScheme))
+            {
+                Colors = ThemeManager.Instance.ActiveTheme.Colors.GetColorScheme(colorScheme);
+            }
+
+            colorScheme = XmlUtils.GetXMLAttrString(node, "disabledButtonColorScheme");
+            if (!String.IsNullOrEmpty(colorScheme))
+            {
+                DisabledButtonColors = ThemeManager.Instance.ActiveTheme.Colors.GetColorScheme(colorScheme);
+            }
+
+            DrawBorder = XmlUtils.GetXMLAttrBool(node, "drawBorder", DrawBorder);
+
+            Panel = XmlUtils.GetXMLAttrString(node, "panel");
+
+            EnabledState = parseEnabledValue(XmlUtils.GetXMLAttrString(node, "enabled", "true"));
+
+            DefaultEnabled = XmlUtils.GetXMLAttrBool(node, "defaultEnabled", false);
+
+            Enabled = true;
+        }
+
+        /// <summary>
+        /// Called after all the children for this widget have been loaded
+        /// </summary>
+        public virtual void PostLoad()
+        {
+        }
+
+        /// <summary>
+        /// Turn selected highlight off for this widget and all its children
+        /// </summary>
+        /// <returns></returns>
+        public bool SelectedHighlightOff()
+        {
+            try
+            {
+                _layout.RootWidget.UIControl.Invoke(new MethodInvoker(delegate
+                {
+                    selectedHighlightOff();
+                }));
+            }
+            catch
+            {
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Uses color scheme to highlight the selected widget and
         /// all its descendent children.  So this is a recursive function.  For
         /// eg, if a box is to be highlighted, this also highlights all
@@ -880,23 +954,20 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Turn selected highlight off for this widget and all its children
+        /// Recursively sets the scale factor to make the widget
+        /// larger or smaller
         /// </summary>
-        /// <returns></returns>
-        public bool SelectedHighlightOff()
+        /// <param name="newScaleFactor"></param>
+        public virtual void SetScaleFactor(float newScaleFactor)
         {
-            try
+            if (_children.Count != 0)
             {
-                _layout.RootWidget.UIControl.Invoke(new MethodInvoker(delegate()
+                foreach (Widget child in _children)
                 {
-                    selectedHighlightOff();
-                }));
+                    // set scale factor for each child widget
+                    child.SetScaleFactor(newScaleFactor);
+                }
             }
-            catch
-            {
-            }
-
-            return true;
         }
 
         /// <summary>
@@ -912,38 +983,6 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Returns the text value of the widget.
-        /// </summary>
-        public virtual String GetText()
-        {
-            return (UIControl != null) ? Windows.GetText(UIControl) : String.Empty;
-        }
-
-        /// <summary>
-        /// Checks if at least on child of this widget can
-        /// be added for animation. Override this behavior for
-        /// specific derived class behavior
-        /// </summary>
-        /// <returns>True if can</returns>
-        public virtual bool CanAddForAnimation()
-        {
-            bool retVal = AddForAnimation;
-            if (!retVal)
-            {
-                foreach (Widget child in _children)
-                {
-                    retVal = child.CanAddForAnimation();
-                    if (retVal)
-                    {
-                        break;
-                    }
-                }
-            }
-            //Log.Debug("WidgetName: " + Name + ", retVal : " + retVal);
-            return retVal;
-        }
-
-        /// <summary>
         /// Display this widget
         /// </summary>
         public void Show()
@@ -953,79 +992,9 @@ namespace ACAT.Lib.Core.WidgetManagement
                 Windows.SetVisible(UIControl, true);
             }
 
+            Visible = true;
             AddForAnimation = true;
         }
-
-        /// <summary>
-        /// Hide this widget
-        /// </summary>
-        public void Hide()
-        {
-            if (UIControl != null)
-            {
-                Windows.SetVisible(UIControl, false);
-            }
-
-            AddForAnimation = false;
-        }
-
-        /// <summary>
-        /// Widget was actuated.  Trigger an event to inform
-        /// the subscribers about this
-        /// </summary>
-        public virtual void Actuate()
-        {
-            Log.Debug(widgetName);
-
-            if (!Enabled)
-            {
-                Log.Debug(widgetName + " is not enabled.  Will not actuate");
-            }
-            else if (EvtActuated != null)
-            {
-                Log.Debug("EvtActuated is not null.  Calling actuate for " + widgetName);
-                EvtActuated(this, new WidgetEventArgs(this));
-            }
-            else
-            {
-                Log.Debug("EvtActuated is null for " + widgetName);
-            }
-        }
-
-        /// <summary>
-        /// Recursively prints the name of this widget and all its children
-        /// </summary>
-        public void Dump()
-        {
-            Log.Debug("Widget Name: " + Name);
-
-            if (_children.Count == 0)
-            {
-                return;
-            }
-
-            foreach (Widget child in _children)
-            {
-                child.Dump();
-            }
-        }
-
-#if DRAW_BORDER_SUPPORT
-        /// <summary>
-        /// Override this to draw a border around the widget
-        /// </summary>
-        protected virtual void DrawBorderOn()
-        {
-        }
-
-        /// <summary>
-        /// Override this to remove border around the widget
-        /// </summary>
-
-        protected virtual void DrawBorderOff()
-        {
-        }
-#endif
 
         /// <summary>
         /// Sets the layout that this widget is a part of
@@ -1037,10 +1006,138 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Let the derived classes handle this
+        /// Creates a rounded corner version of this widget
         /// </summary>
-        protected virtual void onResize()
+        /// <param name="drawBorder">set to true to draw a border</param>
+        /// <param name="radius">radius of the rounded corner</param>
+        protected void createRoundedControl(bool drawBorder, int radius = 8)
         {
+            if (UIControl != null)
+            {
+                graphicsPath = RoundedCornerControl.Create(-1, -1, UIControl.Width - 1, UIControl.Height - 1, radius);
+                if (graphicsPath != null)
+                {
+                    var reg = new Region(graphicsPath);
+                    Windows.SetRegion(UIControl, reg);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Disposer. Release resources and cleanup.
+        /// </summary>
+        /// <param name="disposing">true to dispose managed resources</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            // Check to see if Dispose has already been called.
+            if (!_disposed)
+            {
+                Log.Debug();
+
+                if (disposing)
+                {
+                    // dispose all managed resources.
+                    unInit();
+                }
+
+                // Release unmanaged resources.
+            }
+
+            _disposed = true;
+        }
+
+        /// <summary>
+        /// Turn highlight off for this widget and recursively for
+        /// all its children.  Override this to handle highlighting
+        /// in the derived class
+        /// </summary>
+        /// <returns></returns>
+        protected virtual bool highlightOff()
+        {
+            bool handled;
+
+            notifyEvtHighlightOff(out handled);
+            IsHighlightOn = false;
+
+            if (!handled)
+            {
+                if (UIControl != null)
+                {
+                    UIControl.BackColor = BackgroundColor;
+                    UIControl.ForeColor = ForegroundColor;
+                }
+
+                foreach (Widget widget in _children)
+                {
+                    widget.IsHighlightOn = false;
+                    widget.highlightOff();
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Turn highlight on for this widget and recursively for
+        /// all its children.  Override this to handle highlighting
+        /// in the derived class
+        /// </summary>
+        /// <returns></returns>
+        protected virtual bool highlightOn()
+        {
+            bool handled = false;
+
+            if (EvtHighlightOn != null)
+            {
+                EvtHighlightOn(this, out handled);
+            }
+
+            IsHighlightOn = true;
+
+            if (!handled)
+            {
+                if (UIControl != null)
+                {
+                    UIControl.BackColor = HighlightBackground;
+                    UIControl.ForeColor = HighlightForegroundColor;
+                }
+
+                foreach (Widget widget in _children)
+                {
+                    widget.IsHighlightOn = true;
+                    widget.highlightOn();
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Raises the event to indicate that the widget highlight needs
+        /// to be turned off.  If any of the event subscribers handle the
+        /// highlighing themselves, they should set handled to true.
+        /// </summary>
+        /// <param name="handled"></param>
+        protected void notifyEvtHighlightOff(out bool handled)
+        {
+            handled = false;
+            if (EvtHighlightOff != null)
+            {
+                Delegate[] delegates = EvtHighlightOff.GetInvocationList();
+                bool eventHandled = false;
+                foreach (Delegate del in delegates)
+                {
+                    var highlightOffDelegate = (HighlightOffDelegate)del;
+
+                    highlightOffDelegate.Invoke(this, out handled);
+                    if (handled)
+                    {
+                        eventHandled = true;
+                    }
+                }
+
+                handled = eventHandled;
+            }
         }
 
         /// <summary>
@@ -1049,7 +1146,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         /// highlighing themselves, they should set handled to true.
         /// </summary>
         /// <param name="handled"></param>
-        protected void triggerEvtHighlightOn(out bool handled)
+        protected void notifyEvtHighlightOn(out bool handled)
         {
             handled = false;
             if (EvtHighlightOn != null)
@@ -1079,115 +1176,43 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Raises the event to indicate that the widget highlight needs
-        /// to be turned off.  If any of the event subscribers handle the
-        /// highlighing themselves, they should set handled to true.
+        /// Raises an event if the value of this widget has changed
         /// </summary>
-        /// <param name="handled"></param>
-        protected void triggerEvtHighlightOff(out bool handled)
+        protected void notifyValueChanged()
         {
-            handled = false;
-            if (EvtHighlightOff != null)
+            if (EvtValueChanged != null)
             {
-                Delegate[] delegates = EvtHighlightOff.GetInvocationList();
-                bool eventHandled = false;
-                foreach (Delegate del in delegates)
-                {
-                    var highlightOffDelegate = (HighlightOffDelegate)del;
-
-                    highlightOffDelegate.Invoke(this, out handled);
-                    if (handled)
-                    {
-                        eventHandled = true;
-                    }
-                }
-
-                handled = eventHandled;
+                EvtValueChanged(this, new WidgetEventArgs(this));
             }
         }
 
         /// <summary>
-        /// Creates a rounded corner version of this widget
+        /// Let the derived classes handle this
         /// </summary>
-        /// <param name="drawBorder">set to true to draw a border</param>
-        /// <param name="radius">radius of the rounded corner</param>
-        protected void createRoundedControl(bool drawBorder, int radius = 8)
+        protected virtual void onResize()
         {
+        }
+
+        /// <summary>
+        /// Uses color scheme to un-highlight the selected widget and
+        /// all its descendent children.  So this is a recursive function.  For
+        /// eg, if a box is to be un-highlighted, this also un-highlights all
+        /// the rows and buttons
+        /// </summary>
+        /// <returns>true</returns>
+        protected virtual bool selectedHighlightOff()
+        {
+            IsSelectedHighlightOn = false;
+
             if (UIControl != null)
-            {
-#if SUPPORTS_BORDER
-                if (drawBorder)
-                {
-                    graphicsPath = RoundedCornerControl.Create(0, 0, UIControl.Width, UIControl.Height, 0, RoundedCornerControl.Corners.None);
-                }
-                else
-#endif
-                {
-                    graphicsPath = RoundedCornerControl.Create(-1, -1, UIControl.Width - 1, UIControl.Height - 1, radius);
-                }
-
-                if (graphicsPath != null)
-                {
-                    var reg = new Region(graphicsPath);
-                    Windows.SetRegion(UIControl, reg);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Turn highlight on for this widget and recursively for
-        /// all its children.  Override this to handle highlighting
-        /// in the derived class
-        /// </summary>
-        /// <returns></returns>
-        protected virtual bool highlightOn()
-        {
-            bool handled = false;
-
-            if (EvtHighlightOn != null)
-            {
-                EvtHighlightOn(this, out handled);
-            }
-
-            IsHighlightOn = true;
-
-            if (!handled)
-            {
-                UIControl.BackColor = HighlightBackground;
-                UIControl.ForeColor = HighlightForegroundColor;
-
-                foreach (Widget widget in _children)
-                {
-                    widget.IsHighlightOn = true;
-                    widget.highlightOn();
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Turn highlight off for this widget and recursively for
-        /// all its children.  Override this to handle highlighting
-        /// in the derived class
-        /// </summary>
-        /// <returns></returns>
-        protected virtual bool highlightOff()
-        {
-            bool handled;
-
-            triggerEvtHighlightOff(out handled);
-            IsHighlightOn = false;
-
-            if (!handled)
             {
                 UIControl.BackColor = BackgroundColor;
                 UIControl.ForeColor = ForegroundColor;
-                foreach (Widget widget in _children)
-                {
-                    widget.IsHighlightOn = false;
-                    widget.highlightOff();
-                }
+            }
+
+            foreach (Widget widget in _children)
+            {
+                widget.selectedHighlightOff();
             }
 
             return true;
@@ -1203,52 +1228,18 @@ namespace ACAT.Lib.Core.WidgetManagement
         {
             IsSelectedHighlightOn = true;
 
-            UIControl.BackColor = HighlightSelectedBackgroundColor;
-            UIControl.ForeColor = HighlightSelectedForegroundColor;
-#if DRAW_BORDER_SUPPORT
-            DrawBorderOn();
-#endif
+            if (UIControl != null)
+            {
+                UIControl.BackColor = HighlightSelectedBackgroundColor;
+                UIControl.ForeColor = HighlightSelectedForegroundColor;
+            }
+
             foreach (Widget widget in _children)
             {
                 widget.selectedHighlightOn();
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Uses color scheme to un-highlight the selected widget and
-        /// all its descendent children.  So this is a recursive function.  For
-        /// eg, if a box is to be un-highlighted, this also un-highlights all
-        /// the rows and buttons
-        /// </summary>
-        /// <returns>true</returns>
-        protected virtual bool selectedHighlightOff()
-        {
-            IsSelectedHighlightOn = false;
-
-            UIControl.BackColor = BackgroundColor;
-            UIControl.ForeColor = ForegroundColor;
-#if DRAW_BORDER_SUPPORT
-            DrawBorderOff();
-#endif
-            foreach (Widget widget in _children)
-            {
-                widget.selectedHighlightOff();
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Raises an event if the value of this widget has changed
-        /// </summary>
-        protected void notifyValueChanged()
-        {
-            if (EvtValueChanged != null)
-            {
-                EvtValueChanged(this, new WidgetEventArgs(this));
-            }
         }
 
         /// <summary>
@@ -1280,29 +1271,6 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Disposer. Release resources and cleanup.
-        /// </summary>
-        /// <param name="disposing">true to dispose managed resources</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            // Check to see if Dispose has already been called.
-            if (!_disposed)
-            {
-                Log.Debug();
-
-                if (disposing)
-                {
-                    // dispose all managed resources.
-                    unInit();
-                }
-
-                // Release unmanaged resources.
-            }
-
-            _disposed = true;
-        }
-
-        /// <summary>
         /// Triggered when the user clicks the mouse on this widget.
         /// Actuate the widget
         /// </summary>
@@ -1317,29 +1285,13 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Dispose off children as well
+        /// Event handler for when the UI control is resized
         /// </summary>
-        private void unInit()
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void control_Resize(object sender, EventArgs e)
         {
-            if (UIControl != null)
-            {
-                if (this is IButtonWidget)
-                {
-                    UIControl.MouseClick -= control_MouseClick;
-                }
-
-                UIControl.Resize -= control_Resize;
-            }
-
-            foreach (Widget child in _children)
-            {
-                child.Dispose(true);
-            }
-
-            if (graphicsPath != null)
-            {
-                graphicsPath.Dispose();
-            }
+            onResize();
         }
 
         /// <summary>
@@ -1370,13 +1322,29 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Event handler for when the UI control is resized
+        /// Dispose off children as well
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void control_Resize(object sender, EventArgs e)
+        private void unInit()
         {
-            onResize();
+            if (UIControl != null)
+            {
+                if (this is IButtonWidget)
+                {
+                    UIControl.MouseClick -= control_MouseClick;
+                }
+
+                UIControl.Resize -= control_Resize;
+            }
+
+            foreach (Widget child in _children)
+            {
+                child.Dispose(true);
+            }
+
+            if (graphicsPath != null)
+            {
+                graphicsPath.Dispose();
+            }
         }
     }
 }

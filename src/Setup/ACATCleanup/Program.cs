@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Program.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2016 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,12 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace ACATCleanup
 {
@@ -73,8 +73,52 @@ namespace ACATCleanup
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            if (args.Length > 0 && args[0] == "blah")
+            if (args.Length == 0)
             {
+                return;
+            }
+
+            args[0] = args[0].ToLower();
+
+            if (args[0].StartsWith("uninstalllanguagepack"))
+            {
+                if (args.Length < 2)
+                {
+                    return;
+                }
+
+                var path = args[1];
+                if (Directory.Exists(path))
+                {
+                    if (isPresageRunning())
+                    {
+                        KillPresage();
+                    }
+
+                    Directory.Delete(path, true);
+                }
+
+                Environment.Exit(0);
+            }
+            if (args[0].StartsWith("killpresage"))
+            {
+                if (isPresageRunning())
+                {
+                    KillPresage();
+                }
+
+                return;
+            }
+            else if (args[0].StartsWith("blahblah"))
+            {
+                String[] strings = args[0].Split(';');
+
+                var installDir = String.Empty;
+                if (strings.Length > 1)
+                {
+                    installDir = strings[1];
+                }
+
                 Thread.Sleep(3000);
 
                 if (isPresageRunning())
@@ -82,9 +126,8 @@ namespace ACATCleanup
                     KillPresage();
                 }
 
-                const string key = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Intel Corporation\\ACAT";
-
-                var installDir = (String)Registry.GetValue(key, "InstallDir", String.Empty);
+                //const string key = "HKEY_LOCAL_MACHINE\\SOFTWARE\\Intel Corporation\\ACAT";
+                //var installDir = (String)Registry.GetValue(key, "InstallDir", String.Empty);
 
                 try
                 {
@@ -101,6 +144,12 @@ namespace ACATCleanup
                             Directory.Delete(installDir);
                         }
                     }
+                    else
+                    {
+                        MessageBox.Show("Could not locate ACAT install folder.  Please delete it manually", "ACAT Uninstall",
+                             MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -111,8 +160,7 @@ namespace ACATCleanup
 
                 return;
             }
-
-            if (args.Length > 0 && args[0] == "blah123")
+            else if (args[0] == "blah123")
             {
                 Application.Run(new Form1());
             }
@@ -133,7 +181,9 @@ namespace ACATCleanup
                     String presageUninstaller = Path.Combine(presageInstallDir, "Uninstall.exe");
                     if (File.Exists(presageUninstaller))
                     {
-                        MessageBox.Show("Presage will be uninstalled now", "ACAT Uninstall");
+                        var form = new Form2();
+                        form.ShowDialog();
+
                         var process = new Process();
                         var startInfo = new ProcessStartInfo { FileName = presageUninstaller };
                         process.StartInfo = startInfo;

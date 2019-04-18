@@ -5,14 +5,15 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("LectureManagerAgent")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("FileBrowserAgent")]
+[assembly: AssemblyDescription("Assistive Context-Aware Toolkit (ACAT)")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Microsoft")]
-[assembly: AssemblyProduct("LectureManagerAgent")]
-[assembly: AssemblyCopyright("Copyright © Microsoft 2013")]
+[assembly: AssemblyCompany("http://01.org/acat")]
+[assembly: AssemblyProduct("Assistive Context-Aware Toolkit (ACAT)")]
+[assembly: AssemblyCopyright("Licensed and distributed under the Apache License v2.0 by Intel Corporation")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="SpellCheckManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,56 +18,27 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Linq;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.SpellCheckManagement
 {
     /// <summary>
-    /// Manages word prediction engines.  The engines are essentially DLLs
-    /// located in the WordPredictors folder in one of the extension directories.
-    /// All engines derive from the IWordPredictor interface.  This class looks
-    /// for these DLL's and maintains a list of available word predictors.  The
-    /// app can also set the active word predictor.
-    /// This is a singleton instance class
+    /// Manages SpellChecker engines.  The engines are essentially DLLs
+    /// located in the SpellChecker folder in one of the extension directories.
+    /// All SpellCheck engines derive from the ISpellChecker interface.  This class
+    /// looks for these DLL's and maintains a list of available SpellCheckers.  The
+    /// app can also set the active SpellChecker.
+    ///
+    /// This is a singleton instance class.
     /// </summary>
     public class SpellCheckManager : IDisposable
     {
@@ -80,11 +51,6 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         /// Word prediction manager instance
         /// </summary>
         private static readonly SpellCheckManager _instance = new SpellCheckManager();
-
-        /// <summary>
-        /// Null word predictor. Doesn't do anything :-)
-        /// </summary>
-        private readonly ISpellChecker _nullSpellChecker;
 
         /// <summary>
         /// The active word predictor
@@ -109,11 +75,9 @@ namespace ACAT.Lib.Core.SpellCheckManagement
             AppDomain currentDomain = AppDomain.CurrentDomain;
             currentDomain.AssemblyResolve += currentDomain_AssemblyResolve;
 
-            _nullSpellChecker = new NullSpellChecker();
-            _nullSpellChecker.Init();
-            _activeSpellChecker = _nullSpellChecker;
+            _activeSpellChecker = SpellCheckers.NullSpellChecker;
 
-            UserManagement.ProfileManager.GetFullPath(SpellCheckersRootName);
+            Context.EvtCultureChanged += Context_EvtCultureChanged;
         }
 
         /// <summary>
@@ -133,14 +97,6 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Gets the collection of discovered spell checkers
-        /// </summary>
-        public ICollection<Type> SpellCheckers
-        {
-            get { return _spellCheckers.Collection; }
-        }
-
-        /// <summary>
         /// Disposes the object
         /// </summary>
         public void Dispose()
@@ -152,41 +108,19 @@ namespace ACAT.Lib.Core.SpellCheckManagement
             GC.SuppressFinalize(this);
         }
 
+        public IEnumerable<Type> GetExtensions()
+        {
+            return _spellCheckers.Collection;
+        }
+
         /// <summary>
-        /// Initialize the Word Predictor manager by looking for
-        /// Word predictor dlls.
-        /// The extension dirs parameter contains the root directory under
-        /// which to search for Word Predictor DLL files.  The directories
-        /// are specified in a comma delimited fashion.
-        /// E.g.  Base, Hawking
-        /// These are relative to the application execution directory or
-        /// to the directory where the ACAT framework has been installed.
-        /// It recusrively walks the directories and looks for Word Predictor
-        /// extension DLL files
+        /// Initialize the SpellCheck manager
         /// </summary>
         /// <param name="extensionDirs">list of directories</param>
         /// <returns></returns>
         public bool Init(IEnumerable<String> extensionDirs)
         {
-            bool retVal = true;
-
-            if (_spellCheckers == null)
-            {
-                _spellCheckers = new SpellCheckers();
-
-                // add the null word predictor to our list of
-                // recognizied word predictors
-                var descriptor = _nullSpellChecker.Descriptor;
-                if (descriptor != null)
-                {
-                    _spellCheckers.add(descriptor.Id, typeof(NullSpellChecker));
-                }
-
-                // walk through the directory to discover
-                retVal = _spellCheckers.Load(extensionDirs);
-            }
-
-            return retVal;
+            return true;
         }
 
         /// <summary>
@@ -199,7 +133,35 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Indicates to the active word predictor that it needs to save
+        /// Initializes the SpellCheck manager by looking for
+        /// SpellCheck extension dlls.
+        /// The extension dirs parameter contains the root directory under
+        /// which to search for SpellCheck DLL files.  The directories
+        /// are specified in a comma delimited fashion.
+        /// E.g.  Default, SomeDir
+        /// These are relative to the application execution directory or
+        /// to the directory where the ACAT framework has been installed.
+        /// It recusrively walks the directories and looks for SpellCheck
+        /// extension DLL files
+        /// </summary>
+        /// <param name="extensionDirs">list of directories</param>
+        /// <returns>true on success</returns>
+        public bool LoadExtensions(IEnumerable<String> extensionDirs)
+        {
+            bool retVal = true;
+
+            if (_spellCheckers == null)
+            {
+                _spellCheckers = new SpellCheckers();
+
+                retVal = _spellCheckers.Load(extensionDirs);
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Indicates to the active spell checker that it needs to save
         /// its settings
         /// </summary>
         public void SaveSettings()
@@ -208,42 +170,157 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Sets the spell checker represented by id
-        /// as a Guid or name.
+        /// Sets the active spellchecker for the specified culture.  If
+        /// culture is null, the default culture is used
         /// </summary>
-        /// <param name="idOrName">GUID or name of the spell checker</param>
+        /// <param name="ci">culture info</param>
         /// <returns>true on success</returns>
-        public bool SetActiveSpellChecker(String idOrName)
+        public bool SetActiveSpellChecker(CultureInfo ci = null)
         {
-            bool retVal;
-            var guid = Guid.Empty;
+            bool retVal = true;
+            Guid guid = Guid.Empty;
+            Guid cultureNeutralGuid = Guid.Empty;
 
-            if (!Guid.TryParse(idOrName, out guid))
+            if (ci == null)
             {
-                guid = _spellCheckers.GetByName(idOrName);
+                ci = CultureInfo.DefaultThreadCurrentUICulture;
             }
 
-            var type = Guid.Equals(idOrName, Guid.Empty) ?
-                            typeof(NullSpellChecker) :
-                            _spellCheckers.Lookup(guid);
+            guid = _spellCheckers.GetPreferredOrDefaultByCulture(ci);
+            cultureNeutralGuid = _spellCheckers.GetPreferredOrDefaultByCulture(null);
 
-            if (type != null)
+            if (!Equals(guid, Guid.Empty))  // found something for the specific culture
             {
+                var type = _spellCheckers.Lookup(guid);
+
                 if (_activeSpellChecker != null)
                 {
                     _activeSpellChecker.Dispose();
                     _activeSpellChecker = null;
                 }
 
-                retVal = createAndSetActiveSpellChecker(type);
+                retVal = createAndSetActiveSpellChecker(type, ci);
+
+                if (!retVal)
+                {
+                    _activeSpellChecker = SpellCheckers.NullSpellChecker;
+                    retVal = true; // TODO::
+                }
             }
             else
             {
-                createAndSetActiveSpellChecker(typeof(NullSpellChecker));
-                retVal = false;
+                if (!Equals(cultureNeutralGuid, Guid.Empty))
+                {
+                    var type = _spellCheckers.Lookup(cultureNeutralGuid);
+                    retVal = createAndSetActiveSpellChecker(type, ci);
+                }
+                else
+                {
+                    retVal = false;
+                }
+
+                if (!retVal)
+                {
+                    _activeSpellChecker = SpellCheckers.NullSpellChecker;
+                    retVal = true; // TODO::
+                }
             }
 
             return retVal;
+        }
+
+        /// <summary>
+        /// Displays the preferences dialog for spellcheckers.
+        /// First displays the dialog that lets the user select the
+        /// culture (language) and then displays all the spell checkers
+        /// discovered for that culture. The user can select the
+        /// preferred spellchecker, change settings etc.
+        /// </summary>
+        public void ShowPreferences()
+        {
+            if (!ResourceUtils.IsInstalledCulture(CultureInfo.DefaultThreadCurrentUICulture))
+            {
+                return;
+            }
+
+            var ci = CultureInfo.DefaultThreadCurrentUICulture;
+
+            var spellCheckTypeList = new List<Type>();
+
+            // add all the spellcheckers for the selected language
+            spellCheckTypeList.AddRange(_spellCheckers.Get(ci.Name).ToList());
+
+            if (String.Compare(ci.Name, ci.TwoLetterISOLanguageName, true) != 0)
+            {
+                spellCheckTypeList.AddRange(_spellCheckers.Get(ci.TwoLetterISOLanguageName).ToList());
+            }
+
+            spellCheckTypeList.AddRange(_spellCheckers.Get(null).ToList());
+            spellCheckTypeList.Add(typeof(NullSpellChecker));
+
+            //Now create a list of all the spellchecker objects
+            List<object> objList = spellCheckTypeList.Select(type => Activator.CreateInstance(type)).ToList();
+
+            var categories = objList.Select(spellChecker => new PreferencesCategory(spellChecker)).ToList();
+
+            var preferredGuid = _spellCheckers.GetPreferredOrDefaultByCulture(ci);
+            if (Equals(preferredGuid, Guid.Empty))
+            {
+                preferredGuid = _spellCheckers.GetPreferredOrDefaultByCulture(null);
+            }
+
+            foreach (var category in categories)
+            {
+                category.Enable = false;
+            }
+
+            foreach (var category in categories)
+            {
+                var iExtension = category.PreferenceObj as IExtension;
+                category.Enable = (iExtension != null && iExtension.Descriptor.Id == preferredGuid);
+                if (category.Enable)
+                {
+                    break;
+                }
+            }
+
+            // display the form for the user to select default spellchecker,
+            // change settings etc
+            var form1 = new PreferencesCategorySelectForm
+            {
+                PreferencesCategories = categories,
+                EnableColumnHeaderText = "Default",
+                CategoryColumnHeaderText = "SpellChecker",
+                Title = "Spell Checkers - " + ci.DisplayName,
+                AllowMultiEnable = false
+            };
+
+            if (form1.ShowDialog() == DialogResult.OK)
+            {
+                foreach (var category in form1.PreferencesCategories)
+                {
+                    if (category.Enable && category.PreferenceObj is IExtension)
+                    {
+                        _spellCheckers.SetPreferred(ci.Name, ((IExtension)category.PreferenceObj).Descriptor.Id);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Switch language to the specified one.
+        /// </summary>
+        /// <param name="ci">culture to switch to</param>
+        /// <returns>true on success</returns>
+        public bool SwitchLanguage(CultureInfo ci)
+        {
+            if (_activeSpellChecker != null)
+            {
+                _activeSpellChecker.Dispose();
+                _activeSpellChecker = null;
+            }
+
+            return SetActiveSpellChecker(ci);
         }
 
         /// <summary>
@@ -270,10 +347,7 @@ namespace ACAT.Lib.Core.SpellCheckManagement
                         _spellCheckers.Dispose();
                     }
 
-                    if (_nullSpellChecker != null)
-                    {
-                        _nullSpellChecker.Dispose();
-                    }
+                    Context.EvtCultureChanged -= Context_EvtCultureChanged;
                 }
 
                 // Release unmanaged resources.
@@ -283,20 +357,30 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         }
 
         /// <summary>
-        /// Creates the spell checker using reflection on the
-        /// specified type and makes it the active one.  If it fails,
+        /// Culture changed. Reinitialize spell checker
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="arg">event args</param>
+        private void Context_EvtCultureChanged(object sender, CultureChangedEventArg arg)
+        {
+            SwitchLanguage(arg.Culture);
+        }
+
+        /// <summary>
+        /// Creates the spellchecker for the specified culture.  If it fails,
         /// it set the null spell checker as the active one.
         /// </summary>
-        /// <param name="type">.NET class type of the spell checker</param>
+        /// <param name="type">Type of the spellchecker class</param>
+        /// <param name="ci">Culture</param>
         /// <returns>true on success</returns>
-        private bool createAndSetActiveSpellChecker(Type type)
+        private bool createAndSetActiveSpellChecker(Type type, CultureInfo ci)
         {
             bool retVal;
 
             try
             {
                 var spellChecker = (ISpellChecker)Activator.CreateInstance(type);
-                retVal = spellChecker.Init();
+                retVal = spellChecker.Init(ci);
                 if (retVal)
                 {
                     saveSettings(spellChecker);
@@ -305,15 +389,8 @@ namespace ACAT.Lib.Core.SpellCheckManagement
             }
             catch (Exception ex)
             {
-                Log.Debug("Unable to load spellChecker " + type +
-                        ", assembly: " + type.Assembly.FullName +
-                        ". Exception: " + ex);
+                Log.Debug("Unable to load spellchecker " + type + ", assembly: " + type.Assembly.FullName + ". Exception: " + ex);
                 retVal = false;
-            }
-
-            if (!retVal)
-            {
-                _activeSpellChecker = _nullSpellChecker;
             }
 
             return retVal;

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="AnimationMouseClickEventArgs.cs" company="Intel Corporation">
+// <copyright file="AnimationPlayer.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,54 +18,17 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.Threading;
-using System.Timers;
-using System.Windows.Forms;
-using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.Audit;
 using ACAT.Lib.Core.Interpreter;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Timers;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.AnimationManagement
 {
@@ -106,6 +69,7 @@ namespace ACAT.Lib.Core.AnimationManagement
     }
 
     /// <summary>
+    /// This is the heartbeat (literally) of ACAT.
     /// Handles UI animations. Plays out the animation sequence as laid out
     /// in the xml file.  Handles transitions between animations.  A timer
     /// is used to move the highlight from one widget to the other.  The
@@ -194,7 +158,7 @@ namespace ACAT.Lib.Core.AnimationManagement
             Log.Debug("CTOR(" + rootWidget.Name + ")");
             if (rootWidget.UIControl is IPanel)
             {
-                _syncObj = (rootWidget.UIControl as IPanel).SyncObj;
+                _syncObj = ((IPanel)rootWidget.UIControl).SyncObj;
             }
 
             _transitionSync = _syncObj;
@@ -208,6 +172,7 @@ namespace ACAT.Lib.Core.AnimationManagement
             _playerState = PlayerState.Stopped;
             _variables = variables;
             _inTimer = false;
+            IsSwitchActive = false;
         }
 
         /// <summary>
@@ -237,6 +202,8 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             get { return _highlightedWidget; }
         }
+
+        public bool IsSwitchActive { get; set; }
 
         /// <summary>
         /// Gets the player state
@@ -284,7 +251,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 (_playerState == PlayerState.Running ||
                 _playerState == PlayerState.Timeout))
             {
-                Log.Debug("Interrupt timer for screen " + _rootWidget.Name);
+                Log.Debug("Interrupt timer for panel " + _rootWidget.Name);
 
                 _timer.Stop();
                 setPlayerState(PlayerState.Interrupted);
@@ -304,7 +271,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 _playerState == PlayerState.Timeout ||
                 _playerState == PlayerState.Interrupted))
             {
-                Log.Debug("Stop timer for screen " + _rootWidget.Name);
+                Log.Debug("Stop timer for panel " + _rootWidget.Name);
 
                 _timer.Stop();
                 setPlayerState(PlayerState.Paused);
@@ -313,7 +280,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
-        /// Resume paused player and transitions to the
+        /// Resumes paused player and transitions to the
         /// animation
         /// </summary>
         /// <param name="animation">transition to this animation</param>
@@ -327,13 +294,25 @@ namespace ACAT.Lib.Core.AnimationManagement
                     _timer != null)
             {
                 setPlayerState(PlayerState.Running);
-                Log.Debug("In ResumeCalling player transition");
+                Log.Debug("In Resume Calling Transition");
                 Transition(animation);
             }
         }
 
+        private void tryEnterUntilSuccess(object syncObj)
+        {
+            while (!tryEnter(syncObj))
+            {
+                Log.Debug("CALLING DOEVENTS");
+                if (Application.MessageLoop)
+                {
+                    Application.DoEvents();
+                }
+            }
+        }
+
         /// <summary>
-        /// Stop playing the animation sequence
+        /// Stops playing the animation sequence
         /// </summary>
         public void Stop()
         {
@@ -343,19 +322,14 @@ namespace ACAT.Lib.Core.AnimationManagement
                 return;
             }
 
+            _timer.Elapsed -= timer_Elapsed;
+
             Log.Debug("Inside stopthread. before enter " + _rootWidget.UIControl.Name);
 
-            while (!tryEnter(_transitionSync))
-            {
-                Log.Debug("CALLING DOEVENTS");
-                if (Application.MessageLoop)
-                {
-                    Application.DoEvents();
-                }
-            }
+            tryEnterUntilSuccess(_transitionSync);
 
             Log.Debug("Inside stopthread. after enter " + _rootWidget.UIControl.Name);
-            _timer.Elapsed -= timer_Elapsed;
+            
             _timer.Stop();
 
             Log.Debug("Inside stopthread. before exit" + _rootWidget.UIControl.Name);
@@ -370,7 +344,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
-        /// Transition to the specified target animation. Stops the current
+        /// Transitions to the specified target animation. Stops the current
         /// animation and starts the new one.
         /// </summary>
         /// <param name="animation">Animation to transition to</param>
@@ -391,11 +365,11 @@ namespace ACAT.Lib.Core.AnimationManagement
                 Log.Debug("Transition to " + animation.Name);
                 setPlayerState(PlayerState.Stopped);
 
-                Log.Debug("Transition : Before Enter " + _rootWidget.UIControl.Name + ", threadid: " + GetCurrentThreadId());
-                enter(_transitionSync);
+                Log.Debug("Transition : Before Enter " + _rootWidget.UIControl.Name + ", threadid: " + Kernel32Interop.GetCurrentThreadId());
+                tryEnterUntilSuccess(_transitionSync);
                 Log.Debug("Transition : After Enter " + _rootWidget.UIControl.Name + ", status:  " + _syncObj.Status);
 
-                if (_syncObj.Status == SyncLock.StatusValues.Closing || _syncObj.Status == SyncLock.StatusValues.Closed)
+                if (_syncObj.IsClosing())
                 {
                     Log.Debug("FORM IS CLOSING. releasing _transitionSync and returning" + _rootWidget.UIControl.Name);
                     release(_transitionSync);
@@ -417,9 +391,9 @@ namespace ACAT.Lib.Core.AnimationManagement
                 _currentWidgetIndex = getFirstAnimatedWidget();
                 _highlightedWidget = null;
 
-                Log.Debug("Transition : Before Release" + _rootWidget.UIControl.Name);
+                Log.Debug("Transition : Before Release " + _rootWidget.UIControl.Name);
                 release(_transitionSync);
-                Log.Debug("Transition : After Release" + _rootWidget.UIControl.Name);
+                Log.Debug("Transition : After Release " + _rootWidget.UIControl.Name);
 
                 Log.Debug("Start new animation " + animation.Name);
 
@@ -480,9 +454,6 @@ namespace ACAT.Lib.Core.AnimationManagement
             _disposed = true;
         }
 
-        [DllImport("kernel32.dll")]
-        static private extern uint GetCurrentThreadId();
-
         /// <summary>
         ///  Returns the count of number of animations.  Note that this is not
         ///  necessarily the total number of widget in the list as some can be disabled.
@@ -492,9 +463,6 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             try
             {
-                //Log.Debug("animationName: " + _currentAnimation.Name + ",  widgetlistCount: " + _currentAnimation.AnimationWidgetList.Count);
-
-                //Log.Debug("active widget count: " + count);
                 return _currentAnimation.AnimationWidgetList.Count(t => t.UIWidget.CanAddForAnimation());
             }
             catch (Exception ex)
@@ -515,17 +483,6 @@ namespace ACAT.Lib.Core.AnimationManagement
                 Log.Debug("Scanner closed" + _rootWidget.UIControl.Name);
                 throw new Exception();
             }
-        }
-
-        /// <summary>
-        /// Enters a critical section
-        /// </summary>
-        /// <param name="syncObj">Object used to synchronoze</param>
-        private void enter(Object syncObj)
-        {
-            //Log.Debug("Before ENTER for " + _rootWidget.UIControl.Name);
-            Monitor.Enter(syncObj);
-            //Log.Debug("After ENTER for " + _rootWidget.UIControl.Name);
         }
 
         /// <summary>
@@ -654,8 +611,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <param name="e">event args</param>
         private void timer_Elapsed(object sender, ElapsedEventArgs e)
         {
-            if (_syncObj.Status == SyncLock.StatusValues.Closing ||
-                _syncObj.Status == SyncLock.StatusValues.Closed)
+            if (_syncObj.IsClosing())
             {
                 Log.Debug("Form is closing. Returning" + _rootWidget.UIControl.Name);
                 return;
@@ -671,7 +627,7 @@ namespace ACAT.Lib.Core.AnimationManagement
 
             try
             {
-                Log.Debug("Before tryEnter " + _rootWidget.UIControl.Name + ", threadid: " + GetCurrentThreadId());
+                Log.Debug("Before tryEnter " + _rootWidget.UIControl.Name + ", threadid: " + Kernel32Interop.GetCurrentThreadId());
 
                 if (!tryEnter(_transitionSync))
                 {
@@ -680,8 +636,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 }
 
                 Log.Debug("After tryEnter" + _rootWidget.UIControl.Name + ", status: " + _syncObj.Status);
-                if (_syncObj.Status == SyncLock.StatusValues.Closing ||
-                    _syncObj.Status == SyncLock.StatusValues.Closed)
+                if (_syncObj.IsClosing())
                 {
                     Log.Debug("Form is closing. Returning" + _rootWidget.UIControl.Name);
                     return;
@@ -708,7 +663,8 @@ namespace ACAT.Lib.Core.AnimationManagement
 
                 // if any switch is currently engaged, keep the current widget
                 // highlighted until the user releases the switch
-                if (ActuatorManager.Instance.IsSwitchActive())
+                //if (ActuatorManager.Instance.IsSwitchActive())
+                if (IsSwitchActive)
                 {
                     Log.Debug("Some switch is active. Will try again");
                     return;
@@ -789,8 +745,6 @@ namespace ACAT.Lib.Core.AnimationManagement
                     {
                         _interpreter.Execute(_highlightedWidget.OnHighlightOff);
                     }
-
-                    _highlightedWidget = null;
                 }
 
                 check();

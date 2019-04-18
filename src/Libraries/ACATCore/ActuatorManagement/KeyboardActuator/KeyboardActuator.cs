@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="KeyboardActuator.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.InputActuators
 {
@@ -66,7 +30,9 @@ namespace ACAT.Lib.Core.InputActuators
     /// and rasies switch activation events.  Each key (Eg F5, F6 etc) has a
     /// corresponding switch object and the event is propogated through the switch object.
     /// </summary>
-    [DescriptorAttribute("D91A1877-C92B-4D7E-9AB6-F01F30B12DF9", "Keyboard Actuator", "Handles Keyboard and Mouse input")]
+    [DescriptorAttribute("D91A1877-C92B-4D7E-9AB6-F01F30B12DF9",
+                        "Keyboard Actuator",
+                        "Handles Keyboard and Mouse input")]
     public class KeyboardActuator : ActuatorBase
     {
         /// <summary>
@@ -121,6 +87,8 @@ namespace ACAT.Lib.Core.InputActuators
         {
             subscribeToHookManager();
             actuatorState = State.Running;
+
+            OnInitDone();
             return true;
         }
 
@@ -138,6 +106,19 @@ namespace ACAT.Lib.Core.InputActuators
         public override void Resume()
         {
             actuatorState = State.Running;
+        }
+
+        /// <summary>
+        /// Shows the preferences dialog
+        /// </summary>
+        /// <returns>true on success</returns>
+        public override bool ShowPreferencesDialog()
+        {
+            var prefChooseForm = new ConfigureKeyboardActuatorForm {Actuator = this};
+
+            prefChooseForm.ShowDialog();
+
+            return true;
         }
 
         /// <summary>
@@ -241,7 +222,7 @@ namespace ACAT.Lib.Core.InputActuators
                 }
                 else
                 {
-                    hotKey += "+" + e.KeyCode.ToString();
+                    hotKey += "+" + e.KeyCode;
                 }
 
                 Log.Debug("KeyStateTracker.KeyString: " + hotKey);
@@ -312,6 +293,14 @@ namespace ACAT.Lib.Core.InputActuators
         }
 
         /// <summary>
+        /// Gets whether this supports a custom settings dialog
+        /// </summary>
+        public override bool SupportsPreferencesDialog
+        {
+            get { return true; }
+        }
+
+        /// <summary>
         /// Event handler for a mouse down event
         /// </summary>
         /// <param name="sender">sender</param>
@@ -349,7 +338,6 @@ namespace ACAT.Lib.Core.InputActuators
         /// <summary>
         /// Deallocate resources
         /// </summary>
-        /// <returns></returns>
         private void unInit()
         {
             unsubscribeToHookManager();

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="CreateAndShowScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,16 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
     /// <summary>
-    /// Creates a scanner based on the command and displays it.
+    /// Creates a scanner based on the requested scanner, and displays it.
+    /// Only handles the predefined scanners that ACAT supports.
     /// </summary>
     public class CreateAndShowScanner : RunCommandHandler
     {
@@ -100,6 +65,14 @@ namespace ACAT.Lib.Extension.CommandHandlers
                     retVal = createAndShowScanner(PanelClasses.Mouse);
                     break;
 
+                case "CmdNumberScanner":
+                    retVal = createAndShowScanner(PanelClasses.Number);
+                    break;
+
+                case "CmdFunctionKeyScanner":
+                    retVal = createAndShowScanner(PanelClasses.FunctionKey);
+                    break;
+
                 default:
                     handled = false;
                     break;
@@ -121,7 +94,7 @@ namespace ACAT.Lib.Extension.CommandHandlers
 
             if (form != null)
             {
-                form.Invoke(new MethodInvoker(delegate()
+                form.Invoke(new MethodInvoker(delegate
                 {
                     IPanel panel = Context.AppPanelManager.CreatePanel(panelClass) as IPanel;
                     if (panel != null)

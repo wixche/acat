@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ChromeBrowserAgentBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,56 +18,32 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
+using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
 {
     /// <summary>
-    /// Base class for application agent for the Chrome browser
+    /// Base class for application agent for the Chrome browser. Enables
+    /// easy browing of web pages, page up, page down, go back, forward,
+    /// search etc.
     /// </summary>
     public class ChromeBrowserAgentBase : GenericAppAgentBase
     {
+        /// <summary>
+        /// If set to true, the agent will autoswitch the
+        /// scanners depending on which element has focus.
+        /// Eg: Alphabet scanner if an edit text window has focus,
+        /// the contextual menu if the main document has focus
+        /// </summary>
+        protected bool autoSwitchScanners = true;
+
         /// <summary>
         /// Name of the chrome browser process
         /// </summary>
@@ -77,17 +53,17 @@ namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
         /// Feature supported by this agent. Widgets that
         /// correspond to these features will be enabled
         /// </summary>
-        private readonly String[] _supportedFeatures =
+        private readonly String[] _supportedCommands =
         {
             "OpenFile",
             "SaveFile",
-            "Find",
-            "ContextualMenu",
-            "ZoomIn",
-            "ZoomOut",
-            "ZoomFit",
-            "SelectMode",
-            "SwitchAppWindow"
+            "CmdFind",
+            "CmdContextMenu",
+            "CmdZoomIn",
+            "CmdZoomOut",
+            "CmdZoomFit",
+            "CmdSelectModeToggle",
+            "CmdSwitchApps"
         };
 
         /// <summary>
@@ -108,9 +84,9 @@ namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
         /// will depend on the current context.
         /// </summary>
         /// <param name="arg">contains info about the widget</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            checkWidgetEnabled(_supportedFeatures, arg);
+            checkCommandEnabled(_supportedCommands, arg);
         }
 
         /// <summary>
@@ -139,7 +115,9 @@ namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
             if (!_scannerShown)
             {
                 base.OnFocusChanged(monitorInfo, ref handled);
-                showPanel(this, new PanelRequestEventArgs(PanelClasses.Alphabet, monitorInfo));
+
+                showPanel(this, new PanelRequestEventArgs((autoSwitchScanners) ? "ChromeBrowserContextMenu" : PanelClasses.Alphabet, "Chrome", monitorInfo));
+
                 _scannerShown = true;
             }
 
@@ -156,7 +134,7 @@ namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
         }
 
         /// <summary>
-        /// Invoked to run a command
+        /// Executes the specified command.
         /// </summary>
         /// <param name="command">The command to execute</param>
         /// <param name="commandArg">Optional arguments for the command</param>
@@ -221,10 +199,64 @@ namespace ACAT.Lib.Extension.AppAgents.ChromeBrowser
                     AgentManager.Instance.Keyboard.Send(Keys.LMenu, Keys.Right);
                     break;
 
+                case "NewTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.T);
+                    break;
+
+                case "NextTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.Tab);
+                    break;
+
+                case "CloseTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.W);
+                    break;
+
+                case "ChromeFavorites":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.LShiftKey, Keys.O);
+                    break;
+
+                case "ChromeHistory":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.H);
+                    break;
+
+                case "ChromeAddFavorites":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.D);
+                    break;
+
+                case "ChromeRefreshPage":
+                    AgentManager.Instance.Keyboard.Send(Keys.BrowserRefresh);
+                    break;
+
+                case "ChromeHomePage":
+                    AgentManager.Instance.Keyboard.Send(Keys.BrowserHome);
+                    break;
+
+                case "ChromeBrowserMenu":
+                    showPanel(this, new PanelRequestEventArgs("ChromeBrowserMenu",
+                                                                "Chrome",
+                                                                WindowActivityMonitor.GetForegroundWindowInfo(),
+                                                                true));
+                    break;
+
+
                 default:
                     base.OnRunCommand(command, commandArg, ref handled);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Creates the text control agent for the Chrome browser
+        /// </summary>
+        /// <param name="handle">Handle to the browser window</param>
+        /// <param name="focusedElement">currently focused element</param>
+        /// <param name="handled">set to true if handled</param>
+        /// <returns>the textcontrolagent</returns>
+        protected override TextControlAgentBase createEditControlTextInterface(IntPtr handle,
+                                                                    AutomationElement focusedElement,
+                                                                    ref bool handled)
+        {
+            return new ChromeBrowserTextControlAgent(handle, focusedElement, ref handled);
         }
     }
 }

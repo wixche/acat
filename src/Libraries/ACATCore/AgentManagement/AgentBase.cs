@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AgentsBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,16 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Security.Permissions;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.AgentManagement
 {
@@ -85,7 +50,7 @@ namespace ACAT.Lib.Core.AgentManagement
         /// <summary>
         /// Which features does this support?
         /// </summary>
-        private readonly String[] _supportedFeatures = { "ContextualMenu" };
+        private readonly String[] _supportedCommands = { "CmdContextMenu" };
 
         /// <summary>
         /// Has this been disposed?
@@ -93,14 +58,14 @@ namespace ACAT.Lib.Core.AgentManagement
         private bool _disposed;
 
         /// <summary>
-        /// Text control agent object
-        /// </summary>
-        private ITextControlAgent _textInterface;
-
-        /// <summary>
         /// Name of the agent
         /// </summary>
         private String _name;
+
+        /// <summary>
+        /// Text control agent object
+        /// </summary>
+        private ITextControlAgent _textInterface;
 
         /// <summary>
         /// Initializes a new instance of the class.
@@ -110,6 +75,11 @@ namespace ACAT.Lib.Core.AgentManagement
             _name = Descriptor.Name;
             _invoker = new ExtensionInvoker(this);
         }
+
+        /// <summary>
+        /// Event raised when an agent closed
+        /// </summary>
+        public event AgentClose EvtAgentClose;
 
         /// <summary>
         /// Event raised to request for activating a panel
@@ -122,9 +92,12 @@ namespace ACAT.Lib.Core.AgentManagement
         public event TextChangedDelegate EvtTextChanged;
 
         /// <summary>
-        /// Event raised when an agent closed
+        /// Gets the descriptor object for this agent
         /// </summary>
-        public event AgentClose EvtAgentClose;
+        public virtual IDescriptor Descriptor
+        {
+            get { return DescriptorAttribute.GetDescriptor(GetType()); }
+        }
 
         /// <summary>
         /// Gets or sets name of the agent
@@ -148,11 +121,20 @@ namespace ACAT.Lib.Core.AgentManagement
         public IApplicationAgent Parent { get; set; }
 
         /// <summary>
-        /// Returns the descriptor object for this agent
+        /// Gets the list of processes supported by this agent.
+        /// Override this function.
         /// </summary>
-        public virtual IDescriptor Descriptor
+        public virtual IEnumerable<AgentProcessInfo> ProcessesSupported
         {
-            get { return DescriptorAttribute.GetDescriptor(GetType()); }
+            get { return new AgentProcessInfo[] { }; }
+        }
+
+        /// <summary>
+        /// Gets whether this supports a custom settings dialog
+        /// </summary>
+        public virtual bool SupportsPreferencesDialog
+        {
+            get { return false; }
         }
 
         /// <summary>
@@ -163,39 +145,21 @@ namespace ACAT.Lib.Core.AgentManagement
             get { return _textInterface ?? _nullTextInterface; }
         }
 
-        public virtual IEnumerable<AgentProcessInfo> ProcessesSupported
-        {
-            get { return new AgentProcessInfo[] { }; }
-        }
-
         /// <summary>
-        /// Invoked when the agent is de-activated.  Occurs for e.g. when the active window changes
-        /// focus and the agent manager switches agents.
+        /// Invoked to check if a command  should be enabled or not.  This depends
+        /// on the context and the agent can decide whether the command should
+        /// be enabled or not.  The widget's subclass field contains the context
+        /// and should be used as the clue to set the widget state.  For instance
+        /// if the talk window is already empty, disable the "Clear" button
         /// </summary>
-        public virtual void OnFocusLost()
+        /// <returns>true to enable, false to disable</returns>
+        public virtual void CheckCommandEnabled(CommandEnabledArg arg)
         {
-        }
-
-        /// <summary>
-        /// Invoked whenever focus changes in the target application window - either
-        /// when the active window changes or when the focus within a window changes from
-        /// one control to another. eg, use tabs between edit fields
-        /// </summary>
-        /// <param name="monitorInfo">Contains all the info about the control in focus</param>
-        /// <param name="handled">Set this to true if the agent handled it.</param>
-        public virtual void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
-        {
-            handled = false;
-        }
-
-        /// <summary>
-        /// Returns invoker used to access methods and properties through
-        /// reflection
-        /// </summary>
-        /// <returns></returns>
-        public virtual ExtensionInvoker GetInvoker()
-        {
-            return _invoker;
+            if (_supportedCommands.Contains(arg.Command))
+            {
+                arg.Handled = true;
+                arg.Enabled = true;
+            }
         }
 
         /// <summary>
@@ -211,22 +175,68 @@ namespace ACAT.Lib.Core.AgentManagement
         }
 
         /// <summary>
-        /// Invoked to check if a widget should be enabled or not.  This depends
-        /// on the context and the agent can decide whether the widget should
-        /// be enabled or not.  The widget's subclass field contains the context
-        /// and should be used as the clue to set the widget state.  For instance
-        /// if the talk window is already empty, disable the "Clear" button
+        /// Override this to returns the default preferences for the agent
         /// </summary>
-        /// <param name="monitorInfo">The control that's in focus</param>
-        /// <param name="widget">The widget whose state needs to be enabled or disabled</param>
-        /// <returns>true to enable, false to disable</returns>
-        public virtual void CheckWidgetEnabled(CheckEnabledArgs arg)
+        /// <returns>default preferences</returns>
+        public virtual IPreferences GetDefaultPreferences()
         {
-            if (_supportedFeatures.Contains(arg.Widget.SubClass))
-            {
-                arg.Handled = true;
-                arg.Enabled = true;
-            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns invoker used to access methods and properties through
+        /// reflection
+        /// </summary>
+        /// <returns></returns>
+        public virtual ExtensionInvoker GetInvoker()
+        {
+            return _invoker;
+        }
+
+        /// <summary>
+        /// Returns the preferences object for the agent
+        /// </summary>
+        /// <returns>preferences object</returns>
+        public virtual IPreferences GetPreferences()
+        {
+            return null;
+        }
+
+        /// <summary>
+        /// Implement this to display a contexutal menu for
+        /// the currently active process
+        /// </summary>
+        /// <param name="monitorInfo">Info  about the active process/window</param>
+        public abstract void OnContextMenuRequest(WindowActivityMonitorInfo monitorInfo);
+
+        /// <summary>
+        /// Invoked whenever focus changes in the target application
+        /// window - either when the active window changes or when the
+        /// focus within a window changes from one control to another.
+        /// eg, use tabs between edit fields
+        /// </summary>
+        /// <param name="monitorInfo">Contains all the info about the control in focus</param>
+        /// <param name="handled">Set this to true if the agent handled it.</param>
+        public virtual void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
+        {
+            handled = false;
+        }
+
+        /// <summary>
+        /// Invoked when the agent is de-activated.  Occurs for e.g. when
+        /// the active window changes focus and the agent manager switches agents.
+        /// </summary>
+        public virtual void OnFocusLost()
+        {
+        }
+
+        /// <summary>
+        /// Invoked when the currently active scanner is closed
+        /// </summary>
+        /// <param name="panelClass">name/class of the scanner</param>
+        /// <param name="monitorInfo">Active focused window info</param>
+        public virtual void OnPanelClosed(String panelClass, WindowActivityMonitorInfo monitorInfo)
+        {
         }
 
         /// <summary>
@@ -242,24 +252,6 @@ namespace ACAT.Lib.Core.AgentManagement
         public virtual void OnResume()
         {
         }
-
-        /// <summary>
-        /// Invoked before the agent is deactivated. Override this and return true if it is
-        /// OK to deactivate the agent, false otherwise
-        /// </summary>
-        /// <param name="newAgent">Agent that will be activated</param>
-        /// <returns>true/false</returns>
-        public virtual bool QueryAgentSwitch(IApplicationAgent newAgent)
-        {
-            return true;
-        }
-
-        /// <summary>
-        /// Implement this to display a contexutal menu for
-        /// the currently active process
-        /// </summary>
-        /// <param name="monitorInfo">Info  about the active process/window</param>
-        public abstract void OnContextMenuRequest(WindowActivityMonitorInfo monitorInfo);
 
         /// <summary>
         /// Override this to handle a request to run a command.  Set handled
@@ -358,12 +350,49 @@ namespace ACAT.Lib.Core.AgentManagement
         }
 
         /// <summary>
-        /// Invoked when the currently active scanner is closed
+        /// Invoked before the agent is deactivated. Override this and return true if it is
+        /// OK to deactivate the agent, false otherwise
         /// </summary>
-        /// <param name="panelClass">name/class of the scanner</param>
-        /// <param name="monitorInfo">Active focused window info</param>
-        public virtual void OnPanelClosed(String panelClass, WindowActivityMonitorInfo monitorInfo)
+        /// <param name="newAgent">Agent that will be activated</param>
+        /// <returns>true/false</returns>
+        public virtual bool QueryAgentSwitch(IApplicationAgent newAgent)
         {
+            return true;
+        }
+
+        /// <summary>
+        /// Shows the preferences dialog
+        /// </summary>
+        /// <returns>true on success</returns>
+        public virtual bool ShowPreferencesDialog()
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if the command should to be enabled or not. Check
+        /// our supported features list.
+        /// </summary>
+        /// <param name="arg">widget info</param>
+        protected void checkCommandEnabled(String[] supportedCommands, CommandEnabledArg arg)
+        {
+            if (supportedCommands.Contains(arg.Command))
+            {
+                arg.Handled = true;
+                arg.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Raises an event to indicate the agent is deactivated
+        /// </summary>
+        /// <param name="e">event args</param>
+        protected void notifyAgentClose(AgentCloseEventArgs e)
+        {
+            if (EvtAgentClose != null)
+            {
+                EvtAgentClose(this, e);
+            }
         }
 
         /// <summary>
@@ -393,6 +422,20 @@ namespace ACAT.Lib.Core.AgentManagement
         }
 
         /// <summary>
+        /// Raises an event to request for displaying the specified
+        /// scanner in 'arg'.
+        /// </summary>
+        /// <param name="sender">event source</param>
+        /// <param name="arg">event arg</param>
+        protected void showPanel(object sender, PanelRequestEventArgs arg)
+        {
+            if (EvtPanelRequest != null)
+            {
+                EvtPanelRequest.Invoke(this, arg);
+            }
+        }
+
+        /// <summary>
         /// Call this function to raise events to indicated that something changed
         /// in the text window either due to editing or due to cursor movement. Event
         /// raised is synchronous
@@ -417,46 +460,6 @@ namespace ACAT.Lib.Core.AgentManagement
             if (EvtTextChanged != null)
             {
                 EvtTextChanged.BeginInvoke(this, new TextChangedEventArgs(textInterface), null, null);
-            }
-        }
-
-        /// <summary>
-        /// Raises an event to indicate the agent is deactivated
-        /// </summary>
-        /// <param name="e">event args</param>
-        protected void notifyAgentClose(AgentCloseEventArgs e)
-        {
-            if (EvtAgentClose != null)
-            {
-                EvtAgentClose(this, e);
-            }
-        }
-
-        /// <summary>
-        /// Raises an event to request for displaying the specified
-        /// scanner in 'arg'.
-        /// </summary>
-        /// <param name="sender">event source</param>
-        /// <param name="arg">event arg</param>
-        protected void showPanel(object sender, PanelRequestEventArgs arg)
-        {
-            if (EvtPanelRequest != null)
-            {
-                EvtPanelRequest.Invoke(this, arg);
-            }
-        }
-
-        /// <summary>
-        /// Checks if the widget (scanner button) should to be enabled or not. Check
-        /// our supported features list.
-        /// </summary>
-        /// <param name="arg">widget info</param>
-        protected void checkWidgetEnabled(String[] supportedFeatures, CheckEnabledArgs arg)
-        {
-            if (supportedFeatures.Contains(arg.Widget.SubClass))
-            {
-                arg.Handled = true;
-                arg.Enabled = true;
             }
         }
 

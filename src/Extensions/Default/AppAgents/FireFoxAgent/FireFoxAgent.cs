@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="FirefoxAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,44 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension.AppAgents.Firefox;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Extensions.Default.AppAgents.FireFox
 {
@@ -64,8 +30,48 @@ namespace ACAT.Extensions.Default.AppAgents.FireFox
     /// Base class does all the heavy-lifting.  Override functions
     /// as required customize
     /// </summary>
-    [DescriptorAttribute("F59BDA2F-A0A7-4AFE-B546-7EF3B6F8A1D0", "Firefox Agent", "Application Agent for Firefox")]
+    [DescriptorAttribute("F59BDA2F-A0A7-4AFE-B546-7EF3B6F8A1D0",
+                            "Firefox Agent",
+                            "Manages interactions with the Firefox Browser")]
     internal class FireFoxAgent : FireFoxAgentBase
     {
+        /// <summary>
+        /// Settings for this agent
+        /// </summary>
+        internal static FireFoxAgentSettings Settings;
+
+        /// <summary>
+        /// Name of the settings file
+        /// </summary>
+        private const string SettingsFileName = "FireFoxAgentSettings.xml";
+
+        /// <summary>
+        /// Initializes an instance of the class
+        /// </summary>
+        public FireFoxAgent()
+        {
+            FireFoxAgentSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
+            Settings = FireFoxAgentSettings.Load();
+
+            autoSwitchScanners = Settings.AutoSwitchScannerEnable;
+        }
+
+        /// <summary>
+        /// Returns the default settings
+        /// </summary>
+        /// <returns>Default settings object</returns>
+        public override IPreferences GetDefaultPreferences()
+        {
+            return PreferencesBase.LoadDefaults<FireFoxAgentSettings>();
+        }
+
+        /// <summary>
+        /// Returns the settings for this agent
+        /// </summary>
+        /// <returns>The settings object</returns>
+        public override IPreferences GetPreferences()
+        {
+            return Settings;
+        }
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Abbreviations.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,44 +18,13 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.UserManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Xml;
-using ACAT.Lib.Core.UserManagement;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AbbreviationsManagement
 {
@@ -69,7 +38,7 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         /// <summary>
         /// Name of the abbreviations file
         /// </summary>
-        private const string AbbreviationFile = "Abbreviations.xml";
+        public const string AbbreviationFile = "Abbreviations.xml";
 
         /// <summary>
         ///  xml attribute for the abbreviation mode
@@ -99,7 +68,7 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         /// <summary>
         /// Gets the sorted list of abbreviations
         /// </summary>
-        public IEnumerable<Abbreviation> AbbrevationList
+        public IEnumerable<Abbreviation> AbbreviationList
         {
             get { return _abbreviationList.Values.ToList(); }
         }
@@ -112,8 +81,10 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         /// <returns>true on success</returns>
         public bool Add(Abbreviation abbreviation)
         {
-            if (String.IsNullOrEmpty(abbreviation.Mnemonic) || String.IsNullOrWhiteSpace(abbreviation.Mnemonic) ||
-                String.IsNullOrWhiteSpace(abbreviation.Expansion) || String.IsNullOrEmpty(abbreviation.Expansion))
+            if (String.IsNullOrEmpty(abbreviation.Mnemonic) ||
+                String.IsNullOrWhiteSpace(abbreviation.Mnemonic) ||
+                String.IsNullOrWhiteSpace(abbreviation.Expansion) ||
+                String.IsNullOrEmpty(abbreviation.Expansion))
             {
                 return false;
             }
@@ -153,7 +124,19 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         }
 
         /// <summary>
-        /// Load abbreviations from the specified file.  If filename
+        /// Returns the full path to the abbreviations file.  Checks the user
+        /// folder under the culture specific folder first.
+        /// </summary>
+        /// <returns>full path to the abbreviations file</returns>
+        public string GetAbbreviationsFilePath()
+        {
+            var abbreviationsFile = Path.Combine(UserManager.GetResourcesDir(), AbbreviationFile);
+
+            return File.Exists(abbreviationsFile) ? abbreviationsFile : UserManager.GetFullPath(AbbreviationFile);
+        }
+
+        /// <summary>
+        /// Loads abbreviations from the specified file.  If filename
         /// is null, loads from the default file.  Parses the XML file
         /// and populates the sorted list
         /// </summary>
@@ -165,7 +148,7 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
 
             if (String.IsNullOrEmpty(abbreviationsFile))
             {
-                abbreviationsFile = UserManager.GetFullPath(AbbreviationFile);
+                abbreviationsFile = GetAbbreviationsFilePath();
             }
 
             var doc = new XmlDocument();
@@ -248,16 +231,17 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         }
 
         /// <summary>
-        /// Saves all the abbreviations from the sorted list
-        /// to the abbreviations file
+        /// Saves abbreviations to the specified file
         /// </summary>
+        /// <param name="abbreviationsFile">name of the file</param>
         /// <returns>true on success</returns>
-        public bool Save()
+        public bool Save(String abbreviationsFile)
         {
             bool retVal = true;
+
             try
             {
-                XmlTextWriter xmlTextWriter = createAbbreviationsFile(UserManager.GetFullPath(AbbreviationFile));
+                XmlTextWriter xmlTextWriter = createAbbreviationsFile(abbreviationsFile);
                 if (xmlTextWriter != null)
                 {
                     foreach (Abbreviation abbr in _abbreviationList.Values)
@@ -283,7 +267,17 @@ namespace ACAT.Lib.Core.AbbreviationsManagement
         }
 
         /// <summary>
-        /// Update an existing abbreviation object.
+        /// Saves all the abbreviations from the sorted list
+        /// to the abbreviations file
+        /// </summary>
+        /// <returns>true on success</returns>
+        public bool Save()
+        {
+            return Save(GetAbbreviationsFilePath());
+        }
+
+        /// <summary>
+        /// Updates an existing abbreviation object.
         /// </summary>
         /// <param name="abbreviation">Abbreviation to update</param>
         /// <returns>true if updated successfully</returns>

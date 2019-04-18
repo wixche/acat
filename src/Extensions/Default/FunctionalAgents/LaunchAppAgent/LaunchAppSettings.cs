@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="LaunchAppSettings.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,11 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.PreferencesManagement;
 using System;
-using System.Diagnostics.CodeAnalysis;
-using ACAT.Lib.Core.Utility;
+using System.Xml.Serialization;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
+namespace ACAT.Extensions.Default.FunctionalAgents.LaunchAppAgent
 {
     /// <summary>
     /// Holds the settings for the launch app agent.  This
@@ -70,7 +35,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <summary>
         /// Name of the settings file
         /// </summary>
-        [NonSerialized]
+        [NonSerialized, XmlIgnore]
         public static String PreferencesFilePath;
 
         /// <summary>
@@ -96,12 +61,12 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         }
 
         /// <summary>
-        /// Save settings.  No op for now
+        /// Save settings to the preferences file (PreferencesFilePath)
         /// </summary>
-        /// <returns>true always</returns>
+        /// <returns>true if successful</returns>
         public override bool Save()
         {
-            return true;
+            return Save(this, PreferencesFilePath);
         }
     }
 }

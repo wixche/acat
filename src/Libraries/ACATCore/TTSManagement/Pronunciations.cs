@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Pronunciations.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.UserManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.TTSManagement
 {
@@ -69,6 +35,10 @@ namespace ACAT.Lib.Core.TTSManagement
     /// so the application can handle the expansion suitably.  The list of
     /// pronunciation is created by parsing the xml file that has a list
     /// of all the pronunciations.
+    /// Pronunciations are useful where the TTS engine may not pronounce
+    /// words correctly (eg proper nouns). This object maps the actual
+    /// spelling with the phonetic spelling. The phonetically spelt word
+    /// is the one sent to the TTS engine to convert to speech.
     /// </summary>
     public class Pronunciations : IDisposable
     {
@@ -153,24 +123,21 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
-        /// Load pronunciation from the specified file.  If filename
-        /// is null, loads from the default file.  Parses the XML file
+        /// Loads pronunciation from the specified file. Parses the XML file
         /// and populates the sorted list
         /// </summary>
-        /// <param name="pronunciationsFile">Name of the file</param>
+        /// <param name="filePath">fullpath to the file</param>
         /// <returns>true on success</returns>
-        public bool Load(String pronunciationsFile)
+        public bool Load(String filePath)
         {
-            Log.Debug("Entering...");
-
             bool retVal = true;
 
-            if (String.IsNullOrEmpty(pronunciationsFile))
+            if (String.IsNullOrEmpty(filePath))
             {
                 return false;
             }
 
-            Log.Debug("pronunciationsFile=" + pronunciationsFile);
+            Log.Debug("pronunciationsFile=" + filePath);
 
             var doc = new XmlDocument();
 
@@ -178,14 +145,8 @@ namespace ACAT.Lib.Core.TTSManagement
             {
                 _pronunciationList.Clear();
 
-                if (!File.Exists(pronunciationsFile))
-                {
-                    Log.Debug("Pronunciation file " + pronunciationsFile + " does not exist");
-                    return false;
-                }
-
-                Log.Debug("found pronuncation file!");
-                doc.Load(pronunciationsFile);
+                Log.Debug("Found pronuncation file " + filePath);
+                doc.Load(filePath);
 
                 var xmlNodes = doc.SelectNodes("/ACAT/Pronunciations/Pronunciation");
 
@@ -200,7 +161,7 @@ namespace ACAT.Lib.Core.TTSManagement
             }
             catch (Exception ex)
             {
-                Log.Debug("Error processing pronunciation file " + pronunciationsFile + ". Exception: " + ex.ToString());
+                Log.Debug("Error processing pronunciation file " + filePath + ". Exception: " + ex);
                 retVal = false;
             }
 
@@ -208,8 +169,23 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
-        /// Looks up the word and returns its pronunciation
-        /// object.
+        /// Loads pronunciation from the specified file. Parses the XML file
+        /// and populates the sorted list
+        /// </summary>
+        /// <param name="ci">Culture for which to load the file</param>
+        /// <param name="pronunciationsFileName">Name of the file</param>
+        /// <returns>true on success</returns>
+        public bool Load(CultureInfo ci, String pronunciationsFileName)
+        {
+            Log.Debug("Entering...");
+
+            String filePath = getPronunciationsFilePath(ci, pronunciationsFileName);
+
+            return Load(filePath);
+        }
+
+        /// <summary>
+        /// Looks up the word and returns its pronunciation object.
         /// </summary>
         /// <param name="word">word to lookup</param>
         /// <returns>pronunciation object, null if not found</returns>
@@ -246,7 +222,8 @@ namespace ACAT.Lib.Core.TTSManagement
         /// Takes in a string of text (a sentence for example), parses it into
         /// words, looks up each word in the lookup table to see if there is
         /// an alternate pronunciation and if so, replaces the word with the
-        /// alternate pronunciation.  Returns the converted sentence
+        /// alternate pronunciation.  Returns the converted sentence with the
+        /// phonetically spelt words.
         /// </summary>
         /// <param name="inputString">input text</param>
         /// <returns>converted text</returns>
@@ -412,6 +389,18 @@ namespace ACAT.Lib.Core.TTSManagement
             Log.Debug("word=" + word + " pronunciation=" + pronunciation);
 
             Add(new Pronunciation(word, pronunciation));
+        }
+
+        /// <summary>
+        /// Returns the full path to the pronunciations file.  Checks the
+        /// culture specific folder under the user folder.
+        /// </summary>
+        /// <returns>full path to the pronunciartions file, empty if doesn't exist</returns>
+        private string getPronunciationsFilePath(CultureInfo ci, String pronunciationsFileName)
+        {
+            var file = Path.Combine(UserManager.GetResourcesDir(ci), pronunciationsFileName);
+
+            return File.Exists(file) ? file : String.Empty;
         }
     }
 }

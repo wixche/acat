@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ScannerButtonBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,19 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Windows.Forms;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.Widgets
 {
     /// <summary>
     /// The base class for all widgets that use ScannerButton as
-    /// the underlying .NET Control.
+    /// the underlying .NET Control.  Examples are buttons on the
+    /// scanner, contextual menu icon widgets, contextual menu text
+    /// widgets etc.
     /// </summary>
     public class ScannerButtonBase : ButtonWidgetBase
     {
@@ -101,10 +67,6 @@ namespace ACAT.Lib.Core.Widgets
             : base(uiControl)
         {
             button = uiControl as Button;
-            if (button != null)
-            {
-                button.FlatAppearance.BorderSize = 0;
-            }
         }
 
         /// <summary>
@@ -126,6 +88,7 @@ namespace ACAT.Lib.Core.Widgets
         public override void SetWidgetAttribute(WidgetAttribute attribute)
         {
             base.SetWidgetAttribute(attribute);
+
             _fontFamily = Fonts.Instance.GetFontFamily(new[]
                                                     {   widgetAttribute.FontName,
                                                         CoreGlobals.AppPreferences.FontName,
@@ -153,7 +116,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Dispose resources
+        /// Disposes resources
         /// </summary>
         /// <param name="disposing">true to dispose managed resources</param>
         protected override void Dispose(bool disposing)
@@ -183,7 +146,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Turn highlight off
+        /// Unhighlights the widget
         /// </summary>
         /// <returns>true</returns>
         protected override bool highlightOff()
@@ -199,6 +162,7 @@ namespace ACAT.Lib.Core.Widgets
                 }
                 else
                 {
+                    button.BackColor = Color.Transparent;
                     button.BackgroundImage = null;
                     retVal = base.highlightOff();
                 }
@@ -212,7 +176,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Turn highlight on
+        /// Highlights the widget.
         /// </summary>
         /// <returns>true</returns>
         protected override bool highlightOn()
@@ -240,7 +204,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Turn selected highlight on
+        /// Turns selected highlight on
         /// </summary>
         /// <returns>true</returns>
         protected override bool selectedHighlightOn()
@@ -269,7 +233,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Release resources
+        /// Releases resources
         /// </summary>
         private void unInit()
         {

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Fonts.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,54 +18,21 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Text;
 using System.Linq;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// Collection of fonts used by ACAT.  This obviates the
-    /// need to install special fonts used by ACAT.  The fonts
-    /// can be loaded at runtime and unloaded when the app quits
+    /// Collection of fonts used by ACAT. ACAT uses its own font
+    /// files that contain some of the icons displayed in the scanners.
+    /// This class loads the fonts dynamically to obviate the
+    /// need to install them.  The fonts are unloaded when the app quits.
+    /// When ACAT requests for a font, this class checks both the installed
+    /// fonts as well as the dynamically loaded fonts to find a match.
     /// </summary>
     public class Fonts : IDisposable
     {
@@ -113,7 +80,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Add font specified by the file to the collection
+        /// Adds font specified by the file to the collection
         /// </summary>
         /// <param name="fontFileName">full path to the font file</param>
         /// <returns>true on success</returns>
@@ -164,6 +131,12 @@ namespace ACAT.Lib.Core.PanelManagement
             return tryCollection(fontNames) ?? tryInstalledFonts(fontNames);
         }
 
+        /// <summary>
+        /// Walks the specified directory and locates any fonts files in there
+        /// and loads them
+        /// </summary>
+        /// <param name="directory">Root diretory to start from</param>
+        /// <param name="wildCard">matching wild cards to look for</param>
         private static void loadFontsFromDir(String directory, String wildCard)
         {
             var walker = new DirectoryWalker(directory, wildCard);
@@ -171,6 +144,10 @@ namespace ACAT.Lib.Core.PanelManagement
             walker.Walk(new OnFileFoundDelegate(onFileFound));
         }
 
+        /// <summary>
+        /// Directory walker delegate when it finds a file.
+        /// </summary>
+        /// <param name="file"></param>
         private static void onFileFound(String file)
         {
             Log.Debug("Found font file " + file);
@@ -198,6 +175,7 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             FontFamily font = null;
             //var ifc = new InstalledFontCollection();
+            var done = false;
 
             foreach (var name in fontNames)
             {
@@ -206,8 +184,14 @@ namespace ACAT.Lib.Core.PanelManagement
                     if (String.Compare(family.Name, name, true) == 0)
                     {
                         font = family;
+                        done = true;
                         break;
                     }
+                }
+
+                if (done)
+                {
+                    break;
                 }
             }
 

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WinsockClientActuatorBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,17 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Text;
-using System.Threading;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Text;
+using System.Threading;
 
 namespace ACAT.Lib.Core.InputActuators
 {
     /// <summary>
     /// Represents the base class for an actuator that receives
-    /// trigger events from a TCP/IP socket client.  ACAT in this case
+    /// trigger events from a TCP/IP socket server.  ACAT in this case
     /// acts as a client and the source app for the trigger acts as
     /// the TCP server. Does a lot of the heavy lifting such as trying
     /// to connect to the server, receiving and parsing the data packet
@@ -146,7 +110,7 @@ namespace ACAT.Lib.Core.InputActuators
         /// </summary>
         /// <param name="sourceSwitch">source switch to clone</param>
         /// <returns>Winsock  switch object</returns>
-        public virtual IActuatorSwitch CreateSwitch(IActuatorSwitch sourceSwitch)
+        public override IActuatorSwitch CreateSwitch(IActuatorSwitch sourceSwitch)
         {
             return new WinsockSwitch(sourceSwitch);
         }
@@ -251,7 +215,7 @@ namespace ACAT.Lib.Core.InputActuators
         }
 
         /// <summary>
-        /// Send data over socket
+        /// Sends data over socket
         /// </summary>
         /// <param name="msg">msg to send</param>
         /// <returns>true on sucess</returns>
@@ -272,7 +236,7 @@ namespace ACAT.Lib.Core.InputActuators
         }
 
         /// <summary>
-        /// Depending on the switch action, raised events such as
+        /// Depending on the switch action, raises events such as
         /// switch engaged, switch disengaged etc
         /// </summary>
         /// <param name="switchObj"></param>

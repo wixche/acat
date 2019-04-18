@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="NumbersScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,6 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
@@ -29,48 +25,18 @@ using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Extension;
 using ACAT.Lib.Extension.CommandHandlers;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Scanners
 {
     /// <summary>
     /// Scanner that allows entry of numbers
     /// </summary>
-    [DescriptorAttribute("EABAEEA7-EABF-4499-B571-2D8F29ABFF09", "NumbersScanner", "Numbers Scanner")]
+    [DescriptorAttribute("A2FAC295-9A8F-4214-B55C-BB611F09B252",
+                        "NumbersScanner",
+                        "Enter numbers 0-9")]
     public partial class NumbersScanner : Form, IScannerPanel, ISupportsStatusBar
     {
         /// <summary>
@@ -81,7 +47,7 @@ namespace ACAT.Extensions.Default.UI.Scanners
         /// <summary>
         /// The ScannerCommon object
         /// </summary>
-        private ScannerCommon _scannerCommon;
+        private readonly ScannerCommon _scannerCommon;
 
         /// <summary>
         /// The ScannerHelper object
@@ -89,17 +55,14 @@ namespace ACAT.Extensions.Default.UI.Scanners
         private ScannerHelper _scannerHelper;
 
         /// <summary>
-        /// The StatusBar for this scanner
-        /// </summary>
-        private ScannerStatusBar _statusBar;
-
-        /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
         public NumbersScanner()
         {
+            _scannerCommon = new ScannerCommon(this);
+
             InitializeComponent();
-            createStatusBar();
+
             Load += NumbersScanner_Load;
             FormClosing += NumbersScanner_FormClosing;
             PanelClass = PanelClasses.Number;
@@ -136,6 +99,11 @@ namespace ACAT.Extensions.Default.UI.Scanners
         public String PanelClass { get; private set; }
 
         /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _scannerCommon; } }
+
+        /// <summary>
         /// Gets the ScannerCommon object
         /// </summary>
         public ScannerCommon ScannerCommon
@@ -148,7 +116,7 @@ namespace ACAT.Extensions.Default.UI.Scanners
         /// </summary>
         public ScannerStatusBar ScannerStatusBar
         {
-            get { return _statusBar; }
+            get { return ScannerCommon.StatusBar; }
         }
 
         /// <summary>
@@ -168,7 +136,7 @@ namespace ACAT.Extensions.Default.UI.Scanners
         }
 
         /// <summary>
-        /// Sets the window styhle
+        /// Sets the window style
         /// </summary>
         protected override CreateParams CreateParams
         {
@@ -185,9 +153,9 @@ namespace ACAT.Extensions.Default.UI.Scanners
         /// </summary>
         /// <param name="arg">widget info</param>
         /// <returns>true on success</returns>
-        public bool CheckWidgetEnabled(CheckEnabledArgs arg)
+        public bool CheckCommandEnabled(CommandEnabledArg arg)
         {
-            return _scannerHelper.CheckWidgetEnabled(arg);
+            return _scannerHelper.CheckCommandEnabled(arg);
         }
 
         /// <summary>
@@ -197,7 +165,6 @@ namespace ACAT.Extensions.Default.UI.Scanners
         /// <returns>true on success</returns>
         public bool Initialize(StartupArg startupArg)
         {
-            _scannerCommon = new ScannerCommon(this);
             _scannerHelper = new ScannerHelper(this, startupArg);
 
             if (!_scannerCommon.Initialize(startupArg))
@@ -205,6 +172,8 @@ namespace ACAT.Extensions.Default.UI.Scanners
                 Log.Debug("Could not initialize form " + Name);
                 return false;
             }
+
+            _scannerCommon.SetStatusBar(statusStrip);
 
             return true;
         }
@@ -225,10 +194,6 @@ namespace ACAT.Extensions.Default.UI.Scanners
         {
             Log.Debug();
 
-            _scannerCommon.GetAnimationManager().Pause();
-
-            _scannerCommon.HideScanner();
-
             _scannerCommon.OnPause();
         }
 
@@ -248,10 +213,6 @@ namespace ACAT.Extensions.Default.UI.Scanners
         public void OnResume()
         {
             Log.Debug();
-
-            _scannerCommon.GetAnimationManager().Resume();
-
-            _scannerCommon.ShowScanner();
 
             _scannerCommon.OnResume();
         }
@@ -276,6 +237,16 @@ namespace ACAT.Extensions.Default.UI.Scanners
         }
 
         /// <summary>
+        /// Size of the client changed
+        /// </summary>
+        /// <param name="e">event args</param>
+        protected override void OnClientSizeChanged(EventArgs e)
+        {
+            base.OnClientSizeChanged(e);
+            _scannerCommon.OnClientSizeChanged();
+        }
+
+        /// <summary>
         /// Invoked when the form is clsoing. Release resources
         /// </summary>
         /// <param name="e">event args</param>
@@ -293,26 +264,15 @@ namespace ACAT.Extensions.Default.UI.Scanners
         [EnvironmentPermissionAttribute(SecurityAction.LinkDemand, Unrestricted = true)]
         protected override void WndProc(ref Message m)
         {
-            _scannerCommon.HandleWndProc(m);
-            base.WndProc(ref m);
-        }
-
-        /// <summary>
-        /// Creates the statusbar object for this scanner
-        /// </summary>
-        private void createStatusBar()
-        {
-            if (_statusBar == null)
+            if (_scannerCommon != null)
             {
-                _statusBar = new ScannerStatusBar
+                if (_scannerCommon.HandleWndProc(m))
                 {
-                    AltStatus = BAltStatus,
-                    CtrlStatus = BCtrlStatus,
-                    FuncStatus = BFuncStatus,
-                    ShiftStatus = BShiftStatus,
-                    LockStatus = BLockStatus
-                };
+                    return;
+                }
             }
+
+            base.WndProc(ref m);
         }
 
         /// <summary>
@@ -322,7 +282,6 @@ namespace ACAT.Extensions.Default.UI.Scanners
         /// <param name="e">event arg</param>
         private void NumbersScanner_FormClosing(object sender, FormClosingEventArgs e)
         {
-            KeyStateTracker.FuncOff();
             _scannerCommon.OnClosing();
             _scannerCommon.Dispose();
         }
@@ -336,7 +295,7 @@ namespace ACAT.Extensions.Default.UI.Scanners
         {
             _scannerCommon.OnLoad();
 
-            _scannerCommon.GetAnimationManager().Start(_scannerCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
     }
 }

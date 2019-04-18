@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="DockScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,56 +18,34 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
 using System.Windows.Automation;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// Docks a scanner to a specified window.  the scanner is always
-    /// docked to the left of the parent window
+    /// Docks a scanner to a specified parent window at a specified
+    /// relative position.
     /// </summary>
     public class DockScanner : IDisposable
     {
+        /// <summary>
+        /// If docking to a window, relative position of the dock
+        /// </summary>
+        private readonly Windows.WindowPosition _dockPosition;
+
+        /// <summary>
+        /// The form that should be docked to the window
+        /// </summary>
+        private readonly Form _form;
+
+        /// <summary>
+        /// Handle of the window to dock to
+        /// </summary>
+        private readonly IntPtr _windowHandleDockTo;
+
         /// <summary>
         /// UI automation element represnting the window to dock to
         /// </summary>
@@ -79,25 +57,17 @@ namespace ACAT.Lib.Core.PanelManagement
         private bool _disposed;
 
         /// <summary>
-        /// The form that should be docked to the window
-        /// </summary>
-        private Form _form;
-
-        /// <summary>
-        /// Handle of the window to dock to
-        /// </summary>
-        private IntPtr _windowHandleDockTo;
-
-        /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
         /// <param name="windowHandleDockTo">handle of window to dock to</param>
         /// <param name="form">the dockee</param>
-        public DockScanner(IntPtr windowHandleDockTo, Form form)
+        /// <param name="dockPosition">Relative position of dock</param>
+        public DockScanner(IntPtr windowHandleDockTo, Form form, Windows.WindowPosition dockPosition)
         {
             _windowHandleDockTo = windowHandleDockTo;
             _form = form;
             _automationElementDockTo = null;
+            _dockPosition = dockPosition;
         }
 
         /// <summary>
@@ -189,7 +159,84 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// If the parent window moves, move us as well
+        /// Handles docking of the form to the left of the parent window
+        /// </summary>
+        private void handleDockLeft()
+        {
+            User32Interop.RECT windowRect;
+            User32Interop.GetWindowRect(_windowHandleDockTo, out windowRect);
+
+            int screenLeft = Screen.FromControl(_form).Bounds.Left;
+            int parentWidth = windowRect.right - windowRect.left;
+            int parentHeight = windowRect.bottom - windowRect.top;
+            int spaceLeftHoriz = windowRect.left - screenLeft;
+
+            if (spaceLeftHoriz < _form.Width)
+            {
+                var parentFormLeft = _form.Width;
+                User32Interop.MoveWindow(_windowHandleDockTo, parentFormLeft, windowRect.top, parentWidth, parentHeight, true);
+                User32Interop.GetWindowRect(_windowHandleDockTo, out windowRect);
+            }
+
+            _form.Left = windowRect.left - _form.Width;
+
+            switch (_dockPosition)
+            {
+                case Windows.WindowPosition.TopLeft:
+                    _form.Top = windowRect.top;
+                    break;
+
+                case Windows.WindowPosition.MiddleLeft:
+                    _form.Top = windowRect.top + (parentHeight - _form.Height) / 2;
+                    break;
+
+                case Windows.WindowPosition.BottomLeft:
+                    _form.Top = windowRect.bottom - _form.Height;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Handles docking of the form to the right of the parent window
+        /// </summary>
+        private void handleDockRight()
+        {
+            User32Interop.RECT windowRect;
+            User32Interop.GetWindowRect(_windowHandleDockTo, out windowRect);
+
+            int screenWidth = Screen.FromControl(_form).Bounds.Width;
+            int parentWidth = windowRect.right - windowRect.left;
+            int parentHeight = windowRect.bottom - windowRect.top;
+            int spaceLeftHoriz = screenWidth - windowRect.right;
+
+            if (spaceLeftHoriz < _form.Width)
+            {
+                var parentFormLeft = (screenWidth - _form.Width - parentWidth);
+                User32Interop.MoveWindow(_windowHandleDockTo, parentFormLeft, windowRect.top, parentWidth, parentHeight, true);
+                User32Interop.GetWindowRect(_windowHandleDockTo, out windowRect);
+            }
+
+            _form.Left = windowRect.right;
+
+            switch (_dockPosition)
+            {
+                case Windows.WindowPosition.TopRight:
+                    _form.Top = windowRect.top;
+                    break;
+
+                case Windows.WindowPosition.MiddleRight:
+                    _form.Top = windowRect.top + (parentHeight - _form.Height) / 2;
+                    break;
+
+                case Windows.WindowPosition.BottomRight:
+                    _form.Top = windowRect.bottom - _form.Height;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// If the parent window moves, move the scanner as well so it
+        /// always stays docked
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event arg</param>
@@ -199,30 +246,31 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Positions the dockee to the left of the parent window
+        /// Positions the dockee relative to the parent window at the specified
+        /// dock position
         /// </summary>
         private void positionWindow()
         {
-            User32Interop.RECT windowRect;
-            User32Interop.GetWindowRect(_windowHandleDockTo, out windowRect);
-
-            var rect = new Rectangle(0, 0, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top);
-            var point = new Point(windowRect.left, windowRect.top);
-
-            Log.Debug("parent location: " + point);
-            Log.Debug("parent rectangle: " + rect);
-
-            int screenWidth = Screen.FromControl(_form).Bounds.Width;
-
-            int left = Math.Max(windowRect.left, 0);
-            if (left + _form.Width > screenWidth)
+            switch (_dockPosition)
             {
-                left = screenWidth - _form.Width;
+                case Windows.WindowPosition.TopRight:
+                case Windows.WindowPosition.MiddleRight:
+                case Windows.WindowPosition.BottomRight:
+                    handleDockRight();
+                    break;
+
+                case Windows.WindowPosition.TopLeft:
+                case Windows.WindowPosition.MiddleLeft:
+                case Windows.WindowPosition.BottomLeft:
+                    handleDockLeft();
+                    break;
             }
 
-            _form.Left = left;
-            int top = Math.Max(windowRect.top - _form.Height, 0);
-            _form.Top = top;
+            int screenHeight = Screen.FromControl(_form).Bounds.Height;
+            if ((_form.Top + _form.Height) > screenHeight)
+            {
+                _form.Top = screenHeight - _form.Height;
+            }
         }
     }
 }

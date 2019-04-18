@@ -69,6 +69,9 @@
       <HintPath>..\..\..\..\Redistributable\ACATExtension.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="ACATResources">
+      <HintPath>..\..\..\..\Redistributable\ACATResources.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -80,32 +83,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DLLHostAgentSettings.cs" />
     <Compile Include="DLLHostAgent.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Service Include="{94E38DFF-614B-4cbd-B67C-F211BB35CE8B}" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Config\PhotoViewerRotateMenu.xml">
-      <SubType>Designer</SubType>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Config\PhotoViewerZoomMenu.xml">
-      <SubType>Designer</SubType>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Config\WindowsPhotoViewerContextMenuIconsOnly.xml" />
-    <Content Include="Config\PhotoViewerRotateMenuIconsOnly.xml">
-      <SubType>Designer</SubType>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Config\PhotoViewerZoomMenuIconsOnly.xml">
-      <SubType>Designer</SubType>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Config\WindowsPhotoViewerContextMenu.xml" />
-    <Content Include="Config\PanelConfigMap.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    <Content Include="PanelConfigMap.xml" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

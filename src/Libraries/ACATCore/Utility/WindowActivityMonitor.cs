@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WindowActivityMonitor.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Audit;
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using System.Security.Permissions;
 using System.Windows.Automation;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Audit;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
@@ -75,30 +38,24 @@ namespace ACAT.Lib.Core.Utility
     public class WindowActivityMonitor
     {
         /// <summary>
-        /// Timer to track focus changes
-        /// </summary>
-        private static Timer _timer;
-
-        /// <summary>
-        /// Used to control whether the heartbeat will trigger
-        /// an event or not
-        /// </summary>
-        private static bool _heartbeatToggle = true;
-
-        /// <summary>
         /// How often to check for active window focus changes
         /// </summary>
         private const int Interval = 600;
 
         /// <summary>
-        /// Currently active window
+        /// To prevent re-entrancy
         /// </summary>
-        private static IntPtr _currentHwnd = IntPtr.Zero;
+        private static readonly object _timerSync = new object();
 
         /// <summary>
         /// Automation element of the control that is currently in focus
         /// </summary>
         private static AutomationElement _currentFocusedElement;
+
+        /// <summary>
+        /// Currently active window
+        /// </summary>
+        private static IntPtr _currentHwnd = IntPtr.Zero;
 
         /// <summary>
         /// Normally events are raised only if something changes.  Set
@@ -107,9 +64,15 @@ namespace ACAT.Lib.Core.Utility
         private static volatile bool _forceGetActiveWindow;
 
         /// <summary>
-        /// To prevent re-entrancy
+        /// Used to control whether the heartbeat will trigger
+        /// an event or not
         /// </summary>
-        private static readonly object _timerSync = new object();
+        private static bool _heartbeatToggle = true;
+
+        /// <summary>
+        /// Timer to track focus changes
+        /// </summary>
+        private static Timer _timer;
 
         /// <summary>
         /// For the event raised for activity monitoring
@@ -124,80 +87,14 @@ namespace ACAT.Lib.Core.Utility
         public delegate void AutomationElementFocusChanged(AutomationElement element);
 
         /// <summary>
-        /// Raised for heartbeat subscribers
-        /// </summary>
-        public static event ActivityMonitorDelegate EvtWindowMonitorHeartbeat;
-
-        /// <summary>
         /// Raised when focus changes
         /// </summary>
         public static event ActivityMonitorDelegate EvtFocusChanged;
 
         /// <summary>
-        /// Starts activity monitoring
+        /// Raised for heartbeat subscribers
         /// </summary>
-        /// <returns>true</returns>
-        public static bool Start()
-        {
-            if (_timer == null)
-            {
-                _timer = new Timer { Interval = Interval };
-                _timer.Tick += _timer_Tick;
-                _timer.Start();
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Asyncrhonously forces an event to be raised
-        /// regardless of whether focus changed or not
-        /// </summary>
-        public static void GetActiveWindowAsync()
-        {
-            _forceGetActiveWindow = true;
-        }
-
-        /// <summary>
-        /// Synchronously raises an event to get info
-        /// about the currently active window
-        /// </summary>
-        [SecurityPermission(SecurityAction.InheritanceDemand, Flags = SecurityPermissionFlag.UnmanagedCode)]
-        public static void GetActiveWindow()
-        {
-            getActiveWindow(true);
-        }
-
-        /// <summary>
-        /// Pauses the activity monitoring.  No events
-        /// will be raised when paused
-        /// </summary>
-        public static void Pause()
-        {
-            if (_timer != null)
-            {
-                _timer.Stop();
-                _currentHwnd = IntPtr.Zero;
-            }
-        }
-
-        /// <summary>
-        /// Resumes window activity monitoring.
-        /// </summary>
-        public static void Resume()
-        {
-            try
-            {
-                if (_timer != null)
-                {
-                    _timer.Start();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex.ToString());
-            }
-        }
+        public static event ActivityMonitorDelegate EvtWindowMonitorHeartbeat;
 
         /// <summary>
         /// Disposes resources
@@ -209,6 +106,76 @@ namespace ACAT.Lib.Core.Utility
                 _timer.Stop();
                 _timer.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Synchronously raises an event to get info
+        /// about the currently active window
+        /// </summary>
+        [SecurityPermission(SecurityAction.InheritanceDemand, Flags = SecurityPermissionFlag.UnmanagedCode)]
+        public static void GetActiveWindow()
+        {
+            Log.Debug("ENTER");
+
+            try
+            {
+                IntPtr fgHwnd = Windows.GetForegroundWindow();
+
+                var focusedElement = AutomationElement.FocusedElement;
+                Log.Debug("focusedElement is " + ((focusedElement != null) ? "not null" : "null"));
+
+                var title = Windows.GetWindowTitle(fgHwnd);
+
+                if (ignoreWindow(title))
+                {
+                    return;
+                }
+
+                var process = GetProcessForWindow(fgHwnd);
+
+                if (EvtFocusChanged != null)
+                {
+                    var monitorInfo = new WindowActivityMonitorInfo
+                    {
+                        FgHwnd = fgHwnd,
+                        Title = title,
+                        FgProcess = process,
+                        FocusedElement = focusedElement,
+                        IsNewWindow = true,
+                        IsNewFocusedElement = true
+                    };
+
+#if abc
+                    Log.Debug("#$#  SYNC >>>>>>>>>>>>>>>> Triggering FOCUS changed event");
+
+                    Log.Debug("#$#    title: " + title);
+                    Log.Debug("#$#    fgHwnd " + fgHwnd);
+                    Log.Debug("#$#    nativewinhandle: " + focusedElement.Current.NativeWindowHandle);
+                    Log.Debug("#$#    Process " + process.ProcessName);
+                    Log.Debug("#$#    class: " + focusedElement.Current.ClassName);
+                    Log.Debug("#$#    controltype:  " + focusedElement.Current.ControlType.ProgrammaticName);
+                    Log.Debug("#$#    automationid: " + focusedElement.Current.AutomationId);
+                    Log.Debug("#$#    newWindow: " + monitorInfo.IsNewWindow);
+                    Log.Debug("#$#    newFocusElement: " + monitorInfo.IsNewFocusedElement);
+                    Log.Debug("#$#    IsMinimized :  " + Windows.IsMinimized(monitorInfo.FgHwnd));
+#endif
+                    EvtFocusChanged(monitorInfo);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Debug("exception: " + e);
+            }
+            Log.Debug("EXIT");
+        }
+
+        /// <summary>
+        /// Asyncrhonously forces an event to be raised
+        /// regardless of whether focus changed or not
+        /// </summary>
+        public static void GetActiveWindowAsync()
+        {
+            _forceGetActiveWindow = true;
         }
 
         /// <summary>
@@ -256,7 +223,7 @@ namespace ACAT.Lib.Core.Utility
         {
             int pid;
 
-            GetWindowThreadProcessId(hwnd, out pid);
+            User32Interop.GetWindowThreadProcessId(hwnd, out pid);
 
             return Process.GetProcessById(pid);
         }
@@ -290,6 +257,53 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Pauses the activity monitoring.  No events
+        /// will be raised when paused
+        /// </summary>
+        public static void Pause()
+        {
+            if (_timer != null)
+            {
+                _timer.Stop();
+                _currentHwnd = IntPtr.Zero;
+            }
+        }
+
+        /// <summary>
+        /// Resumes window activity monitoring.
+        /// </summary>
+        public static void Resume()
+        {
+            try
+            {
+                if (_timer != null)
+                {
+                    _timer.Start();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Starts activity monitoring
+        /// </summary>
+        /// <returns>true</returns>
+        public static bool Start()
+        {
+            if (_timer == null)
+            {
+                _timer = new Timer { Interval = Interval };
+                _timer.Tick += _timer_Tick;
+                _timer.Start();
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// The timer function to check the currently focused window
         /// and to see if focus changed or not
         /// </summary>
@@ -308,6 +322,27 @@ namespace ACAT.Lib.Core.Utility
             release(_timerSync);
         }
 
+        /// <summary>
+        /// Returns true if a window with the specified title should be
+        /// ignored  Some windows in Win10 cause the Automation.FocusedElement
+        /// to freeze.  
+        /// </summary>
+        /// <param name="title">title of the window</param>
+        /// <returns>true if it should</returns>
+        private static bool ignoreWindow(String title)
+        {
+            return Windows.GetOSVersion() == Windows.WindowsVersion.Win10 && title.ToLower().StartsWith("jump list for");
+        }
+
+        /// <summary>
+        /// This is the heart of WindowActivityMonitor.  It checks which 
+        /// window currently has focus, and within the window, which UI control
+        /// has focus and raises an event to notify apps.  THe event is raised
+        /// only if the focus changeed since the previous call to this function.
+        /// Set the flag to true to force raising the event even if the focus
+        /// has no changed to a new control since the last call.
+        /// </summary>
+        /// <param name="flag">see notes above</param>
         [EnvironmentPermissionAttribute(SecurityAction.LinkDemand, Unrestricted = true)]
         private static void getActiveWindow(bool flag = false)
         {
@@ -319,6 +354,12 @@ namespace ACAT.Lib.Core.Utility
                 var title = Windows.GetWindowTitle(foregroundWindow);
 
                 Log.Debug("fgHwnd = " + ((foregroundWindow != IntPtr.Zero) ? foregroundWindow.ToString() : "null") + ", title: " + title);
+
+                if (Windows.GetOSVersion() == Windows.WindowsVersion.Win10 &&
+                    title.StartsWith("Jump List for"))
+                {
+                    return;
+                }
 
                 focusedElement = AutomationElement.FocusedElement;
 
@@ -341,7 +382,10 @@ namespace ACAT.Lib.Core.Utility
                     //Log.Debug("Reason: _currentFocusedElement == null : " + (_currentFocusedElement == null));
                     //Log.Debug("Reason: elementChanged : " + elementChanged);
 
-                    _forceGetActiveWindow = false;
+                    if (_forceGetActiveWindow)
+                    {
+                        _forceGetActiveWindow = false;
+                    }
 
                     if (EvtFocusChanged != null)
                     {
@@ -363,13 +407,14 @@ namespace ACAT.Lib.Core.Utility
                         {
                             monitorInfo.IsNewFocusedElement = true;
                         }
-#if abc
+
+#if VERBOSE
                         Log.Debug("#$#>>>>>>>>>>>>>>>> Triggering FOCUS changed event");
 
                         Log.Debug("#$#    title: " + title);
-                        Log.Debug("#$#    fgHwnd " + fgHwnd);
+                        Log.Debug("#$#    fgHwnd " + monitorInfo.FgHwnd);
                         Log.Debug("#$#    nativewinhandle: " + focusedElement.Current.NativeWindowHandle);
-                        Log.Debug("#$#    Process " + process.ProcessName);
+                        Log.Debug("#$#    Process: " + process.ProcessName);
                         Log.Debug("#$#    class: " + focusedElement.Current.ClassName);
                         Log.Debug("#$#    controltype:  " + focusedElement.Current.ControlType.ProgrammaticName);
                         Log.Debug("#$#    automationid: " + focusedElement.Current.AutomationId);
@@ -377,6 +422,7 @@ namespace ACAT.Lib.Core.Utility
                         Log.Debug("#$#    newFocusElement: " + monitorInfo.IsNewFocusedElement);
                         Log.Debug("#$#    IsMinimized :  " + Windows.IsMinimized(monitorInfo.FgHwnd));
 #endif
+
                         if (monitorInfo.IsNewWindow)
                         {
                             AuditLog.Audit(new AuditEventActiveWindowChange(process.ProcessName, title));
@@ -414,42 +460,9 @@ namespace ACAT.Lib.Core.Utility
             }
             catch (Exception e)
             {
-                Log.Debug("exception: " + e.ToString());
+                Log.Debug("exception: " + e);
                 _currentFocusedElement = null;
             }
-
-            //Log.Debug("*** EXIT ***");
-        }
-
-        /// <summary>
-        /// Returns the parent process for the focused element
-        /// </summary>
-        /// <param name="focusedElement">element that has focus</param>
-        /// <returns>the parent process</returns>
-        private static Process getActiveProcess(AutomationElement focusedElement)
-        {
-            Process process = null;
-
-            int pid = (int)focusedElement.GetCurrentPropertyValue(AutomationElement.ProcessIdProperty);
-            if (pid != 0)
-            {
-                process = Process.GetProcessById(pid);
-                Log.Debug("Active process is " + process.ProcessName + " MainWindowHandle: " + process.MainWindowHandle);
-            }
-
-            return process;
-        }
-
-        /// <summary>
-        /// Uses Monitor to see if it can enter
-        /// </summary>
-        /// <param name="syncObj">synchronization object</param>
-        /// <returns>true if it entered</returns>
-        private static bool tryEnter(Object syncObj)
-        {
-            bool lockTaken = false;
-            System.Threading.Monitor.TryEnter(syncObj, ref lockTaken);
-            return lockTaken;
         }
 
         /// <summary>
@@ -468,7 +481,16 @@ namespace ACAT.Lib.Core.Utility
             }
         }
 
-        [DllImportAttribute("user32.dll", EntryPoint = "GetWindowThreadProcessId")]
-        private static extern int GetWindowThreadProcessId([InAttribute()] IntPtr handle, out int lpdwProcessId);
+        /// <summary>
+        /// Uses Monitor to see if it can enter
+        /// </summary>
+        /// <param name="syncObj">synchronization object</param>
+        /// <returns>true if it entered</returns>
+        private static bool tryEnter(Object syncObj)
+        {
+            bool lockTaken = false;
+            System.Threading.Monitor.TryEnter(syncObj, ref lockTaken);
+            return lockTaken;
+        }
     }
 }

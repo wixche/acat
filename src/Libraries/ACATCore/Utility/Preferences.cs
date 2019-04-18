@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Preferences.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,53 +19,14 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.MaintainabilityRules",
-        "SA1401:FieldsMustBePrivate",
-        Scope = "namespace",
-        Justification = "This class is serialized")]
-
-#endregion SupressStyleCopWarnings
+using ACAT.Lib.Core.PreferencesManagement;
+using System.Xml.Serialization;
 
 namespace ACAT.Lib.Core.Utility
 {
-    /// <summary>
+    /// <summary>*
     /// Contains system-wide preference settings.  Settings are serialized
     /// into a file for saving and loaded from the file.
     /// Be careful about renaming variables in this as the variable names
@@ -74,69 +35,101 @@ namespace ACAT.Lib.Core.Utility
     [Serializable]
     public abstract class Preferences : PreferencesBase
     {
-        [NonSerialized]
+        [NonSerialized, XmlIgnore]
         public static Assembly ApplicationAssembly;
 
-        // Scanner settings
-        public int TabScanTime = 1000;
+        [NonSerialized, XmlIgnore]
+        public String AppId;
 
+        [NonSerialized, XmlIgnore]
+        public String AppName = "ACAT";
+
+        [NonSerialized, XmlIgnore]
+        public bool EnableGlass = false;
+
+        [NonSerialized, XmlIgnore]
+        public float GlassOpacity = 0.8f;
+
+        [NonSerialized, XmlIgnore]
+        public bool GlassFadeIn = false;
+
+        // Scanner settings
+        [IntDescriptor("Scan time for ACAT Menus and Dialogs (in msecs)", 100, 3000)]
+        public int MenuDialogScanTime = 1000;
+
+        [IntDescriptor("First repeat time for sticky buttons (in msecs)", 200, 3000)]
         public int FirstRepeatTime = 1000;
-        public int SteppingTime = 1000;
-        public int HesitateTime = 250;
-        public bool ScanClick = false;
-        public bool SelectClick = true;
+
+        [IntDescriptor("Scan time (in msecs)", 100, 3000)]
+        public int ScanTime = 1000;
+
+        [IntDescriptor("Extra time to pause on the first row/column/button (in msecs)", 0, 3000)]
+        public int FirstPauseTime = 250;
+
+        [BoolDescriptor("Play a beep on a selection")]
+        public bool SelectClick = false;
+
         public float ScannerScaleFactor = 10.0f;
+
         public String FontName = "Arial";
         public int FontSize = 18;
-        public String Skin = "BlackYellow";
+
+        public String Theme = "Default";
+
+        [BoolDescriptor("If the scanner is repositioned, save its position")]
         public bool AutoSaveScannerLastPosition = false;
+
+        [BoolDescriptor("If the scanner is resized, save its size")]
+        public bool AutoSaveScannerScaleFactor = true;
+
+        [BoolDescriptor("Include disabled buttons in the scanning cycle", true)]
         public bool ScanDisabledElements = true;
-        public Windows.WindowPosition ScannerPosition = Windows.WindowPosition.TopRight;
-        public bool ScannerShowBorder = true;
-        public bool ScannerShowTitleBar = true;
-        public String PreferredPanelConfigNames = "MenusWithText";
-        //public bool ScannerRoundedCorners = false;
 
-        //Actuator settings
-        public int AcceptTime = 50;
+        public Windows.WindowPosition ScannerPosition = Windows.WindowPosition.MiddleRight;
 
-        // General settings
-        public bool EnableGlass = true;
+        public String PreferredPanelConfigNames = "AlphabetQwerty";
 
-        public float GlassOpacity = 0.8f;
-        public bool GlassFadeIn = false;
-        public int SpacesAfterPunctuation = 1;
+        [IntDescriptor("Minimum hold time for the actuator switch to trigger (in msecs)", 0, 2000)]
+        public int MinActuationHoldTime = 50;
+
         public bool HideWindowsTaskBar = false;
+
+        [BoolDescriptor("Auto-hide scanner if the acutator is not triggered for a specified period (see HideOnIdleTimeout) (in msecs)", true)]
         public bool HideScannerOnIdle = false;
+
+        [IntDescriptor("Hide the scanner if no actuator switch trigger is detected for this length of time ", 3000, 60000)]
         public int HideOnIdleTimeout = 5000;
+
+        [BoolDescriptor("Expand an abbreviation only if a space, comma or a period is inserted after the abbreviation")]
         public bool ExpandAbbreviationsOnSeparator = false;
 
-        // Debug settings
+        [BoolDescriptor("Log debug trace messages to a file.  DebugMessagesEnable must also be set to true.  Use with caution.  This will slow down the app and also consume disk space.  Use only for troubleshooting")]
         public bool DebugLogMessagesToFile = false;
 
+        [BoolDescriptor("Enable debug trace messages. Use the DebugView utility to view the messages  (Use with caution.  This will slow down the app)")]
         public bool DebugMessagesEnable = false;
         public bool DebugAssertOnError = false;
 
-        // Audit Log settings
+        [BoolDescriptor("Enable audit logging of important events.  Use with caution.  This will slow down the app.  Use only for troubleshooting)")]
         public bool AuditLogEnable = false;
 
         public String AuditLogFilter = "*";
 
-        // Talk window settings
+        [BoolDescriptor("Retain the text in the Talk window when its closed and restore it when the Talk window is displayed the next time")]
         public bool RetainTalkWindowContentsOnHide = true;
 
+        [FloatDescriptor("Size of the font in the Talk window.  Set to 0 for default font size", 0, 72)]
         public float TalkWindowFontSize = 0.0f;
 
-        // TTS Settings
+        [BoolDescriptor("Snap Talk window to vertically stretch from the top of the display to the bottom")]
+        public bool SnapTalkWindow = false;
+
+        [BoolDescriptor("Enable Text-to-speech")]
         public bool EnableTextToSpeech = true;
 
         public String Extensions = "Default";
 
-        public String PreferredTTSEngines = "SAPI TTS Engine";
-
-        public String PreferredWordPredictor = "Presage Word Predictor";
-
-        public String PreferredSpellChecker = "ACAT SpellChecker";
+        public String Language = String.Empty;
 
         /// <summary>
         /// Returns a string representation of the settings
@@ -152,8 +145,8 @@ namespace ACAT.Lib.Core.Utility
         /// <summary>
         /// Resolves a string representation of a value into an integer. The
         /// String can start with the '@' symbol in which case, it refers to
-        /// the preference setting of the value.  For instance, @SteppingTime would
-        /// mean the Stepping time preference setting.
+        /// the preference setting of the value.  For instance, @ScanTime would
+        /// mean the scan time preference setting.
         /// </summary>
         /// <param name="value">String representation</param>
         /// <param name="defaultIfNull">Value to return if the string is null or empty</param>
@@ -195,13 +188,17 @@ namespace ACAT.Lib.Core.Utility
         {
             int retVal = defaultValue;
 
-            switch (variableName)
+            switch (variableName.ToLower())
             {
-                case "@AcceptTime":
-                    retVal = AcceptTime;
+                case "@accepttime":
+                    retVal = MinActuationHoldTime;
                     break;
 
-                case "@FontSize":
+                case "@minactuationholdtime":
+                    retVal = MinActuationHoldTime;
+                    break;
+
+                case "@fontsize":
                     retVal = FontSize;
                     break;
             }

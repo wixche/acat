@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="PreferredAgents.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AgentManagement
 {
@@ -71,6 +35,15 @@ namespace ACAT.Lib.Core.AgentManagement
     /// such as notepad could have multiple agents which are loaded
     /// from different folders. This config file tells ACAT which of
     /// those to use.
+    /// 
+    /// Eg of PreferredAgents.xml file
+    /// <ACAT>
+    ///   <PreferredAgents>
+    ///     <PreferredAgent agentId="EC2EA972-934B-4EE0-A909-3EA0140AC738"/>
+    ///     <PreferredAgent agentId="E9B930AD-CB35-478C-BDA6-D7FC43349019"/>
+    ///   </PreferredAgents>
+     /// </ACAT>
+
     /// </summary>
     internal class PreferredAgents : IDisposable
     {
@@ -112,6 +85,25 @@ namespace ACAT.Lib.Core.AgentManagement
             foreach (IApplicationAgent agent in _preferredAgents.Values)
             {
                 if (String.Compare(agentName, agent.Name, true) == 0)
+                {
+                    return agent;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Looks up the list of preferred list and returns the
+        /// agent corresponding to the category specified
+        /// </summary>
+        /// <param agentName>Category of the agent</param>
+        /// <returns></returns>
+        public IApplicationAgent GetPreferredAgentByCategory(String category)
+        {
+            foreach (IApplicationAgent agent in _preferredAgents.Values)
+            {
+                if (String.Compare(category, agent.Descriptor.Category, true) == 0)
                 {
                     return agent;
                 }

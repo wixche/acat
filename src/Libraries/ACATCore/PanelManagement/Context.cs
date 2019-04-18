@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Context.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,75 +18,51 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using ACAT.Lib.Core.AbbreviationsManagement;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.AgentManagement;
+using ACAT.Lib.Core.CommandManagement;
 using ACAT.Lib.Core.SpellCheckManagement;
 using ACAT.Lib.Core.TalkWindowManagement;
 using ACAT.Lib.Core.ThemeManagement;
 using ACAT.Lib.Core.TTSManagement;
 using ACAT.Lib.Core.Utility;
+using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Core.WordPredictionManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1126:PrefixCallsCorrectly",
-    Scope = "namespace",
-    Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1101:PrefixLocalCallsWithThis",
-    Scope = "namespace",
-    Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1121:UseBuiltInTypeAlias",
-    Scope = "namespace",
-    Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.DocumentationRules",
-    "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-    Scope = "namespace",
-    Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.NamingRules",
-    "SA1309:FieldNamesMustNotBeginWithUnderscore",
-    Scope = "namespace",
-    Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.NamingRules",
-    "SA1300:ElementMustBeginWithUpperCaseLetter",
-    Scope = "namespace",
-    Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
     /// Encapsulates system wide global shared objects. Creates
     /// instances of all the managers in ACAT.  Since all managers
-    /// are singletons, access to them can be made through this class. 
+    /// are singletons, access to them can be made through this class.
+    /// Handles initialization of all the different managers in ACAT
+    /// such as the TTSManager, WordPrediction manager etc.
+    /// There is a sequence to the initialization:
+    ///     PreInit()
+    ///     Init()
+    ///     PostInit()
+    ///
     /// </summary>
     public class Context
     {
+        private static readonly AbbreviationsManager _abbreviationsManager;
         private static readonly ActuatorManager _actuatorManager;
-
-        // All the ACAT manager objects
         private static readonly AgentManager _agentManager;
         private static readonly AutomationEventManager _automationEventManager;
+        private static readonly CommandManager _commandManager;
         private static readonly List<String> _extensionDirs = new List<String>();
         private static readonly PanelManager _panelManager;
         private static readonly SpellCheckManager _spellCheckManager;
         private static readonly ThemeManager _themeManager;
         private static readonly TTSManager _ttsManager;
         private static readonly WordPredictionManager _wordPredictionManager;
+
         /// <summary>
         /// Error message if there was an error during initialization
         /// </summary>
@@ -107,14 +83,21 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         private static StartupFlags _startupFlags = StartupFlags.All;
 
+        /// <summary>
+        /// The Talk window manager
+        /// </summary>
         private static TalkWindowManager _talkManager;
+
         /// <summary>
         /// Initializes the singleton instance of the class
         /// </summary>
         static Context()
         {
             AppQuit = false;
-            AppWindowPosition = Windows.WindowPosition.TopRight;
+            AppWindowPosition = Windows.WindowPosition.MiddleRight;
+
+            //Initialize all the manager singleton objects
+            _abbreviationsManager = AbbreviationsManager.Instance;
             _actuatorManager = ActuatorManager.Instance;
             _agentManager = AgentManager.Instance;
             _panelManager = PanelManager.Instance;
@@ -123,7 +106,13 @@ namespace ACAT.Lib.Core.PanelManagement
             _wordPredictionManager = WordPredictionManager.Instance;
             _spellCheckManager = SpellCheckManager.Instance;
             _themeManager = ThemeManager.Instance;
+            _commandManager = CommandManager.Instance;
         }
+
+        /// <summary>
+        /// Raised when the culture changes
+        /// </summary>
+        public static event CultureChanged EvtCultureChanged;
 
         /// <summary>
         /// Which modules to activate?
@@ -137,13 +126,17 @@ namespace ACAT.Lib.Core.PanelManagement
             TextToSpeech = 4,
             SpellChecker = 16,
             Abbreviations = 32,
+            AgentManager = 64,
             All = 0xffff
         }
 
         /// <summary>
-        /// Gets or sets the list of abbreviations
+        /// Gets the single Abbreviations Manager object
         /// </summary>
-        public static Abbreviations AppAbbreviations { get; set; }
+        public static AbbreviationsManager AppAbbreviationsManager
+        {
+            get { return _abbreviationsManager; }
+        }
 
         /// <summary>
         /// Gets the ACAT ActuatorManager object
@@ -169,6 +162,11 @@ namespace ACAT.Lib.Core.PanelManagement
             get { return _automationEventManager; }
         }
 
+        public static CommandManager AppCommandManager
+        {
+            get { return _commandManager; }
+        }
+
         /// <summary>
         /// Gets the ACAT PanelManager object
         /// </summary>
@@ -176,6 +174,7 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             get { return _panelManager; }
         }
+
         /// <summary>
         /// Gets or sets whether the application should quit
         /// </summary>
@@ -198,7 +197,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Gets the ACAT Theme Manager (Skins) object
+        /// Gets the ACAT Theme Manager object
         /// </summary>
         public static ThemeManager AppThemeManager
         {
@@ -225,18 +224,49 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             get { return _wordPredictionManager; }
         }
+
         /// <summary>
         /// Gets the list of extension directories
         /// </summary>
         public static IEnumerable<String> ExtensionDirs
         {
-            get { return _extensionDirs; }
+            get
+            {
+                if (!_extensionDirs.Any())
+                {
+                    getExtensionDirs();
+                }
+
+                return _extensionDirs;
+            }
         }
+
         /// <summary>
         /// Gets or sets whether the talk windows should be displayed
         /// when the application is launched
         /// </summary>
         public static bool ShowTalkWindowOnStartup { get; set; }
+
+        /// <summary>
+        /// Changes the culture to the specified culture
+        /// </summary>
+        /// <param name="culture">culture to change to</param>
+        public static void ChangeCulture(CultureInfo cultureInfo)
+        {
+            var culture = CultureInfo.CreateSpecificCulture(cultureInfo.Name);
+
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
+
+            ResourceUtils.InstallLanguageForUser();
+
+            if (EvtCultureChanged != null)
+            {
+                WindowActivityMonitor.Pause();
+                EvtCultureChanged(cultureInfo, new CultureChangedEventArg(cultureInfo));
+                WindowActivityMonitor.Resume();
+            }
+        }
 
         /// <summary>
         /// Disposes allocated resources
@@ -268,9 +298,9 @@ namespace ACAT.Lib.Core.PanelManagement
                 AppSpellCheckManager.Dispose();
             }
 
-            if (AppAbbreviations != null)
+            if (AppAbbreviationsManager != null)
             {
-                AppAbbreviations.Dispose();
+                AppAbbreviationsManager.Dispose();
             }
 
             if (AppAgentMgr != null)
@@ -310,11 +340,18 @@ namespace ACAT.Lib.Core.PanelManagement
 
             AppWindowPosition = CoreGlobals.AppPreferences.ScannerPosition;
 
+            AppCommandManager.Init();
+
             bool retVal = createThemeManager();
 
             if (retVal)
             {
                 retVal = createPanelManager();
+            }
+
+            if (retVal)
+            {
+                retVal = initWidgetManager();
             }
 
             if (retVal)
@@ -341,6 +378,11 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (retVal)
             {
+                retVal = createAgentManager();
+            }
+
+            if (retVal)
+            {
                 retVal = createActuatorManager();
             }
 
@@ -352,6 +394,7 @@ namespace ACAT.Lib.Core.PanelManagement
             Log.Debug("Returning " + retVal + " from context init");
             return retVal;
         }
+
         /// <summary>
         /// Returns whether initialization error was fatal
         /// </summary>
@@ -364,13 +407,20 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <summary>
         /// Call this AFTER the Init function
         /// </summary>
-        public static void PostInit()
+        public static bool PostInit()
         {
+            if (isEnabled(StartupFlags.AgentManager))
+            {
+                AppAgentMgr.PostInit();
+            }
+
             if (isEnabled(StartupFlags.WindowsActivityMonitor))
             {
-                AppAgentMgr.Init(ExtensionDirs);
+                WindowActivityMonitor.GetActiveWindow();
                 WindowActivityMonitor.Start();
             }
+
+            return true;
         }
 
         /// <summary>
@@ -381,6 +431,7 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             return true;
         }
+
         /// <summary>
         /// Creates the singleton instance of the Abbreviations manager
         /// </summary>
@@ -391,8 +442,7 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (isEnabled(StartupFlags.Abbreviations))
             {
-                AppAbbreviations = new Abbreviations();
-                retVal = AppAbbreviations.Load();
+                retVal = AppAbbreviationsManager.Init();
 
                 if (!retVal)
                 {
@@ -409,10 +459,41 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <returns>true on success</returns>
         private static bool createActuatorManager()
         {
-            bool retVal = AppActuatorManager.Init(ExtensionDirs);
+            bool retVal = AppActuatorManager.LoadExtensions(ExtensionDirs);
+
+            if (retVal)
+            {
+                retVal = AppActuatorManager.Init(ExtensionDirs);
+            }
+
             if (!retVal)
             {
                 setCompletionStatus("Error initializing actuator manager");
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Initializes the singleton instance of the Agent manager
+        /// </summary>
+        /// <returns></returns>
+        private static bool createAgentManager()
+        {
+            bool retVal = true;
+
+            if (isEnabled(StartupFlags.AgentManager))
+            {
+                retVal = AppAgentMgr.LoadExtensions(ExtensionDirs);
+                if (retVal)
+                {
+                    retVal = AppAgentMgr.Init(ExtensionDirs);
+                }
+
+                if (!retVal)
+                {
+                    setCompletionStatus("Error initializing the Agent manager");
+                }
             }
 
             return retVal;
@@ -427,7 +508,7 @@ namespace ACAT.Lib.Core.PanelManagement
             bool retVal = AppPanelManager.Init(ExtensionDirs);
             if (!retVal)
             {
-                setCompletionStatus("Error initializing Screen Manager");
+                setCompletionStatus("Error initializing Panel Manager");
             }
 
             return retVal;
@@ -443,14 +524,18 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (isEnabled(StartupFlags.SpellChecker))
             {
-                retVal = AppSpellCheckManager.Init(ExtensionDirs);
+                retVal = AppSpellCheckManager.LoadExtensions(ExtensionDirs);
                 if (retVal)
                 {
-                    retVal = AppSpellCheckManager.SetActiveSpellChecker(CoreGlobals.AppPreferences.PreferredSpellChecker);
+                    retVal = AppSpellCheckManager.Init(ExtensionDirs);
+                }
+
+                if (retVal)
+                {
+                    retVal = AppSpellCheckManager.SetActiveSpellChecker();
                     if (!retVal)
                     {
-                        setCompletionStatus("Error setting spell checker to [" +
-                                            CoreGlobals.AppPreferences.PreferredWordPredictor + "]");
+                        setCompletionStatus("Error setting active spell checker");
                     }
                 }
                 else
@@ -479,7 +564,7 @@ namespace ACAT.Lib.Core.PanelManagement
             bool retVal = AppThemeManager.Init();
             if (retVal)
             {
-                AppThemeManager.SetActiveTheme(CoreGlobals.AppPreferences.Skin);
+                AppThemeManager.SetActiveTheme(CoreGlobals.AppPreferences.Theme);
             }
             else
             {
@@ -488,6 +573,7 @@ namespace ACAT.Lib.Core.PanelManagement
 
             return retVal;
         }
+
         /// <summary>
         /// Creates the singleton instance of the Text-to-Speech manager
         /// </summary>
@@ -498,11 +584,15 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (isEnabled(StartupFlags.TextToSpeech) && CoreGlobals.AppPreferences.EnableTextToSpeech)
             {
-                retVal = AppTTSManager.Init(ExtensionDirs);
+                retVal = AppTTSManager.LoadExtensions(ExtensionDirs);
+                if (retVal)
+                {
+                    retVal = AppTTSManager.Init(ExtensionDirs);
+                }
 
                 if (retVal)
                 {
-                    retVal = AppTTSManager.SetActiveEngine(CoreGlobals.AppPreferences.PreferredTTSEngines);
+                    retVal = AppTTSManager.SetActiveEngine();
                 }
 
                 if (!retVal)
@@ -526,14 +616,19 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (isEnabled(StartupFlags.WordPrediction))
             {
-                retVal = AppWordPredictionManager.Init(ExtensionDirs);
+                retVal = AppWordPredictionManager.LoadExtensions(ExtensionDirs);
+
                 if (retVal)
                 {
-                    retVal = AppWordPredictionManager.SetActiveWordPredictor(CoreGlobals.AppPreferences.PreferredWordPredictor);
+                    retVal = AppWordPredictionManager.Init(ExtensionDirs);
+                }
+
+                if (retVal)
+                {
+                    retVal = AppWordPredictionManager.SetActiveWordPredictor();
                     if (!retVal)
                     {
-                        setCompletionStatus("Error setting word prediction engine to [" +
-                                            CoreGlobals.AppPreferences.PreferredWordPredictor + "]");
+                        setCompletionStatus("Error setting active word prediction engine");
                     }
                 }
                 else
@@ -544,6 +639,7 @@ namespace ACAT.Lib.Core.PanelManagement
 
             return retVal;
         }
+
         /// <summary>
         /// Reads the config setting for extension directories,
         /// resolves them into full directory paths, checks if they
@@ -582,6 +678,21 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
+        /// Initialize the widget manager
+        /// </summary>
+        /// <returns>true on success</returns>
+        private static bool initWidgetManager()
+        {
+            bool retVal = WidgetManager.Init(ExtensionDirs);
+            if (!retVal)
+            {
+                setCompletionStatus("Error initializing Widget Manager");
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
         /// Checks if the specified flag is in startup
         /// </summary>
         /// <param name="flag">Flag to check for</param>
@@ -590,6 +701,7 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             return (_startupFlags & flag) == flag;
         }
+
         /// <summary>
         /// Sets the completion status string. This could be an
         /// error message for instance

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="SpellChecker.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,15 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Xml;
+using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.SpellCheckManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Xml;
 
 namespace ACAT.Extensions.Default.SpellCheckers
 {
@@ -72,10 +38,17 @@ namespace ACAT.Extensions.Default.SpellCheckers
     /// after a sentence terminator (such as '.', '!' etc).  Inserts
     /// spaces after a terminator.
     /// </summary>
-    [DescriptorAttribute("9DB43B3D-A407-4FC5-8025-89497E5B9767", "ACAT SpellChecker",
-                            "ACAT's Default Spell Checker.")]
-    public class SpellChecker : ISpellChecker
+    [DescriptorAttribute("9DB43B3D-A407-4FC5-8025-89497E5B9767",
+                        "ACAT SpellChecker",
+                        "ACAT's Default Spell Checker.")]
+    public class SpellChecker : ISpellChecker, IExtension
     {
+        /// <summary>
+        /// Name of the spellcheck file that contains a mapping between
+        /// the misspelt word and its correct spelling
+        /// </summary>
+        private const string SpellCheckFileName = "SpellCheck.xml";
+
         /// <summary>
         /// Spell check dictionary.  Maps a misspelt word with the correct spelling
         /// </summary>
@@ -95,23 +68,6 @@ namespace ACAT.Extensions.Default.SpellCheckers
         }
 
         /// <summary>
-        /// Returns the settings dialog
-        /// </summary>
-        /// <returns></returns>
-        public ISpellCheckerSettingsDialog SettingsDialog
-        {
-            get { return null; }
-        }
-
-        /// <summary>
-        /// Doesn't support a settings dialog
-        /// </summary>
-        public bool SupportsSettingsDialog
-        {
-            get { return false; }
-        }
-
-        /// <summary>
         /// Disposes resources
         /// </summary>
         public void Dispose()
@@ -124,21 +80,31 @@ namespace ACAT.Extensions.Default.SpellCheckers
         }
 
         /// <summary>
+        /// Returns the extension invoker object
+        /// </summary>
+        /// <returns>invoker object</returns>
+        public ExtensionInvoker GetInvoker()
+        {
+            return null;
+        }
+
+        /// <summary>
         /// Initializes the spell checker.  Reads the spell check file and
         /// loads the spellings into the list
         /// </summary>
+        /// <param name="ci">Culture</param>
         /// <returns>true on success</returns>
-        public bool Init()
+        public bool Init(CultureInfo ci)
         {
             bool retVal = true;
 
-            var spellingFile = UserManager.GetFullPath("SpellCheck.xml");
+            var spellingFile = getSpellCheckFilePath(ci);
 
             var doc = new XmlDocument();
 
             try
             {
-                if (File.Exists(spellingFile))
+                if (!String.IsNullOrEmpty(spellingFile) && File.Exists(spellingFile))
                 {
                     doc.Load(spellingFile);
 
@@ -161,7 +127,7 @@ namespace ACAT.Extensions.Default.SpellCheckers
             }
             catch (Exception ex)
             {
-                Log.Debug("Error processing spelling file " + spellingFile + ". Exception: " + ex.ToString());
+                Log.Debug("Error processing spelling file " + spellingFile + ". Exception: " + ex);
                 retVal = false;
             }
 
@@ -169,7 +135,7 @@ namespace ACAT.Extensions.Default.SpellCheckers
         }
 
         /// <summary>
-        /// Load factory default settings.
+        /// Loads factory default settings.
         /// </summary>
         /// <returns>true always</returns>
         public bool LoadDefaultSettings()
@@ -206,13 +172,20 @@ namespace ACAT.Extensions.Default.SpellCheckers
         }
 
         /// <summary>
-        ///  Save settings into the specified directory
+        ///  Saves settings into the specified directory
         /// </summary>
         /// <param name="configFileDirectory">name of the directory</param>
         /// <returns>true always</returns>
         public bool SaveSettings(String configFileDirectory)
         {
             return true;
+        }
+
+        /// <summary>
+        /// Uninitializes
+        /// </summary>
+        public void Uninit()
+        {
         }
 
         /// <summary>
@@ -253,6 +226,18 @@ namespace ACAT.Extensions.Default.SpellCheckers
             {
                 _wordList.Add(word, replaceWith);
             }
+        }
+
+        /// <summary>
+        /// Returns the full path to the spell check file.  Checks the
+        /// culture specific folder under the user folder.
+        /// </summary>
+        /// <returns>full path to the spellcheck file, empty if doesn't exist</returns>
+        private string getSpellCheckFilePath(CultureInfo ci)
+        {
+            var spellCheckFile = Path.Combine(UserManager.GetResourcesDir(ci), SpellCheckFileName);
+
+            return File.Exists(spellCheckFile) ? spellCheckFile : String.Empty;
         }
     }
 }

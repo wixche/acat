@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Form1.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2016 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,8 @@ namespace ACATCleanup
     /// </summary>
     public partial class Form1 : Form
     {
+        private string acatFolderPath;
+
         /// <summary>
         /// Initializes a new instance of the class
         /// </summary>
@@ -39,6 +41,12 @@ namespace ACATCleanup
             InitializeComponent();
             CenterToScreen();
             TopMost = true;
+
+            var thisExe = Process.GetCurrentProcess().MainModule.FileName;
+
+            acatFolderPath = Path.GetDirectoryName(thisExe);
+
+            labelFolderLocation.Text = "Folder to be deleted:  " + acatFolderPath;
         }
 
         /// <summary>
@@ -67,11 +75,12 @@ namespace ACATCleanup
 
             var thisExe = Process.GetCurrentProcess().MainModule.FileName;
 
+            var dirName = Path.GetDirectoryName(thisExe);
             var tempPath = Path.Combine(tmpDir, Path.GetFileName(thisExe));
 
             File.Copy(thisExe, tempPath, true);
 
-            var info = new ProcessStartInfo {Arguments = "blah", FileName = tempPath};
+            var info = new ProcessStartInfo {Arguments = "blahblah;\""+dirName+ "\"", FileName = tempPath};
 
             Process.Start(info);
 

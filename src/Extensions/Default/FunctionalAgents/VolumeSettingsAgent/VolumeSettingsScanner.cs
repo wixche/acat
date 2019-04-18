@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="VolumeSettingsScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,7 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
@@ -30,6 +27,10 @@ using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Extension;
 using ACAT.Lib.Extension.CommandHandlers;
+using System;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 #region SupressStyleCopWarnings
 
@@ -66,7 +67,7 @@ using ACAT.Lib.Extension.CommandHandlers;
 
 #endregion SupressStyleCopWarnings
 
-namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
+namespace ACAT.Extensions.Default.FunctionalAgents.VolumeSettings
 {
     /// <summary>
     /// Form that enables the user to set the volume
@@ -74,13 +75,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
     /// different TTS engines have different ranges.  The value
     /// is then scaled by the TTS engine before setting it.
     /// </summary>
-    [DescriptorAttribute("48694D06-DF49-4175-ADAC-E4533EB29E17", "VolumeSettingsScanner", "Volume Settings Scanner")]
+    [DescriptorAttribute("48694D06-DF49-4175-ADAC-E4533EB29E17",
+                        "VolumeSettingsScanner",
+                        "Volume Settings Scanner")]
     public partial class VolumeSettingsScanner : Form, IScannerPanel, ISupportsStatusBar
     {
         /// <summary>
         /// Command dispatcher object
         /// </summary>
         private readonly Dispatcher _dispatcher;
+
+        /// <summary>
+        /// The ScannerCommon object
+        /// </summary>
+        private readonly ScannerCommon _scannerCommon;
 
         /// <summary>
         /// Used for synchronization
@@ -99,11 +107,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         private bool _isDirty;
 
         /// <summary>
-        /// The ScannerCommon object
-        /// </summary>
-        private ScannerCommon _scannerCommon;
-
-        /// <summary>
         /// Widget that holds the title of the scanner
         /// </summary>
         private Widget _titleWidget;
@@ -118,6 +121,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// </summary>
         public VolumeSettingsScanner()
         {
+            _scannerCommon = new ScannerCommon(this);
+
             InitializeComponent();
 
             _syncObj = new SyncLock();
@@ -159,6 +164,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// Gets the panel class of this form
         /// </summary>
         public String PanelClass { get; private set; }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _scannerCommon; } }
 
         /// <summary>
         /// Gets the ScannerCommon object
@@ -210,9 +220,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
         /// <returns>true on success</returns>
-        public bool CheckWidgetEnabled(CheckEnabledArgs arg)
+        public bool CheckCommandEnabled(CommandEnabledArg arg)
         {
-            switch (arg.Widget.SubClass)
+            switch (arg.Command)
             {
                 default:
                     arg.Enabled = true;
@@ -230,8 +240,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// <returns>true on success</returns>
         public bool Initialize(StartupArg startupArg)
         {
-            _scannerCommon = new ScannerCommon(this);
-
             if (!_scannerCommon.Initialize(startupArg))
             {
                 Log.Debug("Could not initialize form " + Name);
@@ -259,10 +267,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         {
             Log.Debug();
 
-            _scannerCommon.GetAnimationManager().Pause();
-
-            _scannerCommon.HideScanner();
-
             _scannerCommon.OnPause();
         }
 
@@ -282,10 +286,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         public void OnResume()
         {
             Log.Debug();
-
-            _scannerCommon.GetAnimationManager().Resume();
-
-            _scannerCommon.ShowScanner();
 
             _scannerCommon.OnResume();
         }
@@ -323,6 +323,16 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         }
 
         /// <summary>
+        /// Size of the client changed
+        /// </summary>
+        /// <param name="e">event args</param>
+        protected override void OnClientSizeChanged(EventArgs e)
+        {
+            base.OnClientSizeChanged(e);
+            _scannerCommon.OnClientSizeChanged();
+        }
+
+        /// <summary>
         /// Release resources
         /// </summary>
         /// <param name="e">event args</param>
@@ -339,8 +349,31 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         [EnvironmentPermissionAttribute(SecurityAction.LinkDemand, Unrestricted = true)]
         protected override void WndProc(ref Message m)
         {
-            _scannerCommon.HandleWndProc(m);
+            if (_scannerCommon != null)
+            {
+                if (_scannerCommon.HandleWndProc(m))
+                {
+                    return;
+                }
+            }
+
             base.WndProc(ref m);
+        }
+
+        /// <summary>
+        /// Does a volume test by converting a test string to speech
+        /// </summary>
+        private void doVolumeTest()
+        {
+            if (!Context.AppTTSManager.ActiveEngine.IsMuted())
+            {
+                var vol = Context.AppTTSManager.GetNormalizedVolume();
+
+                // send two separate commands so there is a gap in
+                // the tts conversion
+                Context.AppTTSManager.ActiveEngine.Speak("Volume ");
+                Context.AppTTSManager.ActiveEngine.Speak(vol.Value.ToString());
+            }
         }
 
         /// <summary>
@@ -360,7 +393,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
                 setting = 0;
             }
 
-            _titleWidget.SetText("Volume (" + ((setting < 0) ?
+            _titleWidget.SetText(R.GetString("Volume") + " (" + ((setting < 0) ?
                                     Context.AppTTSManager.GetNormalizedVolume().Value :
                                     setting) + ")");
         }
@@ -396,7 +429,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         {
             _scannerCommon.OnLoad();
 
-            _titleWidget = _scannerCommon.GetRootWidget().Finder.FindChild("Title");
+            _titleWidget = PanelCommon.RootWidget.Finder.FindChild("Title");
 
             setTitle();
 
@@ -404,7 +437,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
             _initialSetting = volume.Value;
             _volumeSelected = Context.AppTTSManager.GetNormalizedVolume().Value;
 
-            _scannerCommon.GetAnimationManager().Start(_scannerCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
@@ -438,11 +471,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
 
                     if (form._volumeSelected == 0)
                     {
-                        prompt = "Mute Speaker?";
+                        prompt = R.GetString("MuteSpeaker");
                     }
                     else
                     {
-                        prompt = "Set volume to " + form._volumeSelected + "?";
+                        prompt = String.Format(R.GetString("SetVolumeTo"), form._volumeSelected);
                     }
 
                     if (DialogUtils.ConfirmScanner(prompt))
@@ -486,7 +519,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
                 switch (Command)
                 {
                     case "VolumeTest":
-                        Context.AppTTSManager.ActiveEngine.Speak("Test");
+                        (Dispatcher.Scanner.Form as VolumeSettingsScanner).doVolumeTest();
                         break;
 
                     default:

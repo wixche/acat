@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="LectureManagerHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,54 +18,19 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
+using ACAT.ACATResources;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
     /// <summary>
-    /// Launches the Lecture manager
+    /// Launches the Lecture manager functional agent
     /// </summary>
     public class LectureManagerHandler : RunCommandHandler
     {
@@ -87,6 +52,11 @@ namespace ACAT.Lib.Extension.CommandHandlers
         {
             handled = true;
 
+            if (!Context.AppAgentMgr.CanActivateFunctionalAgent())
+            {
+                return false;
+            }
+
             Form form = Dispatcher.Scanner.Form;
 
             showLectureManager(form);
@@ -95,36 +65,25 @@ namespace ACAT.Lib.Extension.CommandHandlers
         }
 
         /// <summary>
-        /// Which file extensions to exclude from the file browser
-        /// </summary>
-        /// <returns>list of extensions to exclude</returns>
-        private String[] getExcludeExtensions()
-        {
-            return (!String.IsNullOrEmpty(Common.AppPreferences.FileBrowserExcludeFileExtensions)) ?
-                            Common.AppPreferences.FileBrowserExcludeFileExtensions.Split(';') : new String[] { };
-        }
-
-        /// <summary>
         /// Launches the lecture manager.  First launches the
         /// file browser to get lecture file and then launches lecture
-        /// manager with the file.
+        /// manager with the file.  Only text files and word doc files
+        /// are supported.
         /// </summary>
         /// <param name="form">scanner form</param>
         private async void launchLectureManager(Form form)
         {
             // First launch the file browser to get
             // the file name from the user
-            IApplicationAgent fileBrowserAgent = Context.AppAgentMgr.GetAgentByName("FileBrowser Agent");
+            IApplicationAgent fileBrowserAgent = Context.AppAgentMgr.GetAgentByCategory("FileBrowserAgent");
             if (fileBrowserAgent == null)
             {
                 return;
             }
 
             fileBrowserAgent.GetInvoker().SetValue("AutoLaunchFile", false);
-            fileBrowserAgent.GetInvoker().SetValue("SelectActionOpen", true);
-            fileBrowserAgent.GetInvoker().SetValue("Folders", Common.AppPreferences.GetFavoriteFolders());//.AppPreferences.FavoriteFolders.Split(';'));
-            fileBrowserAgent.GetInvoker().SetValue("IncludeFileExtensions", new[] { "*.", "txt", "doc", "docx" });
-            fileBrowserAgent.GetInvoker().SetValue("ExcludeFileExtensions", getExcludeExtensions());
+            fileBrowserAgent.GetInvoker().SetValue("Action", "Open");
+            fileBrowserAgent.GetInvoker().SetValue("IncludeFileExtensions", new[] { "txt", "doc", "docx" });
 
             await Context.AppAgentMgr.ActivateAgent(fileBrowserAgent as IFunctionalAgent);
 
@@ -133,11 +92,11 @@ namespace ACAT.Lib.Extension.CommandHandlers
             if (!String.IsNullOrEmpty(selectedFile))
             {
                 // now launch lecture manager for the selected file
-                IApplicationAgent agent = Context.AppAgentMgr.GetAgentByName("Lecture Manager Agent");
+                IApplicationAgent agent = Context.AppAgentMgr.GetAgentByCategory("LectureManagerAgent");
                 if (agent != null)
                 {
                     Windows.CloseForm(form);
-                    IExtension extension = agent as IExtension;
+                    IExtension extension = agent;
                     extension.GetInvoker().SetValue("LoadFromFile", true);
                     extension.GetInvoker().SetValue("LectureFile", selectedFile);
                     Log.Debug("Invoking LectureManager agent");
@@ -155,8 +114,7 @@ namespace ACAT.Lib.Extension.CommandHandlers
         /// <param name="form">scanner form</param>
         private void showLectureManager(Form form)
         {
-            Context.AppTalkWindowManager.CloseTalkWindow();
-            IntPtr handle = User32Interop.FindWindow(null, "Lecture Manager");
+            IntPtr handle = User32Interop.FindWindow(null, R.GetString("LectureManager"));
             if (handle != IntPtr.Zero)
             {
                 User32Interop.SetForegroundWindow(handle);

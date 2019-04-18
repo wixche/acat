@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TextControlAgentBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,13 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.Utility;
+using ACAT.Lib.Core.WordPredictionManagement;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Utility;
-using ACAT.Lib.Core.WordPredictionManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AgentManagement.TextInterface
 {
@@ -79,30 +44,30 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         /// <summary>
         /// Text manipulation features supported by the base class
         /// </summary>
-        private readonly String[] _supportedFeatures =
+        private readonly String[] _supportedCommands =
         {
-            "Cut",
-            "Copy",
-            "Paste",
-            "Undo",
-            "Redo",
-            "PreviousChar",
-            "NextChar",
-            "PreviousLine",
-            "NextLine",
-            "PreviousWord",
-            "NextWord",
-            "PreviousPage",
-            "NextPage",
-            "TopOfDoc",
-            "EndOfDoc",
-            "Home",
-            "End",
-            "SelectAll",
-            "SelectMode",
-            "DeletePreviousChar",
-            "DeleteNextChar",
-            "EnterKey"
+            "CmdCut",
+            "CmdCopy",
+            "CmdPaste",
+            "CmdUndo",
+            "CmdRedo",
+            "CmdPrevChar",
+            "CmdNextChar",
+            "CmdPrevLine",
+            "CmdNextLine",
+            "CmdPrevWord",
+            "CmdNextWord",
+            "CmdPrevPage",
+            "CmdNextPage",
+            "CmdTopOfDoc",
+            "CmdEndOfDoc",
+            "CmdHome",
+            "CmdEnd",
+            "CmdSelectAll",
+            "CmdSelectModeToggle",
+            "CmdDeletePrevChar",
+            "CmdDeleteNextChar",
+            "CmdEnterKey"
         };
 
         /// <summary>
@@ -121,6 +86,7 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         public TextControlAgentBase()
         {
             _selectMode = false;
+            Context.AppAgentMgr.EvtNonScannerMouseDown += AppAgentMgr_EvtNonScannerMouseDown;
         }
 
         /// <summary>
@@ -148,20 +114,20 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         public virtual bool CheckInsertOrReplaceWord(out int insertOrReplaceOffset, out String wordToReplace)
         {
             return TextUtils.CheckInsertOrReplaceWord(
-                                    GetText(), 
-                                    GetCaretPos(), 
-                                    out insertOrReplaceOffset, 
+                                    GetText(),
+                                    GetCaretPos(),
+                                    out insertOrReplaceOffset,
                                     out wordToReplace);
         }
 
         /// <summary>
-        /// Checks if the widget (scanner button) should to be enabled or not. Check
+        /// Checks if the command should to be enabled or not. Check
         /// our supported features list.
         /// </summary>
         /// <param name="arg">widget info</param>
-        public virtual void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public virtual void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            if (_supportedFeatures.Contains(arg.Widget.SubClass))
+            if (_supportedCommands.Contains(arg.Command))
             {
                 arg.Handled = true;
                 arg.Enabled = true;
@@ -236,6 +202,15 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
             // Prevent finalization code for this object
             // from executing a second time.
             GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Does the text control support smart punctuations?
+        /// </summary>
+        /// <returns>true on success</returns>
+        public virtual bool EnableSmartPunctuations()
+        {
+            return true;
         }
 
         /// <summary>
@@ -849,7 +824,7 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         /// or page navigation.  Text continues to highlight as
         /// caret moves
         /// </summary>
-        /// <param name="selectMode">true to turn on</param>
+        /// <param name="mode">true to turn on</param>
         public void SetSelectMode(bool mode)
         {
             _selectMode = mode;
@@ -886,11 +861,11 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         /// Check to see if the widget should be enabled or not based
         /// on contextual information
         /// </summary>
-        /// <param name="supportedFeatures"></param>
+        /// <param name="supportedCommands"></param>
         /// <param name="arg"></param>
-        protected void checkWidgetEnabled(String[] supportedFeatures, CheckEnabledArgs arg)
+        protected void checkCommandEnabled(String[] supportedCommands, CommandEnabledArg arg)
         {
-            if (supportedFeatures.Contains(arg.Widget.SubClass))
+            if (supportedCommands.Contains(arg.Command))
             {
                 arg.Handled = true;
                 arg.Enabled = true;
@@ -1163,6 +1138,19 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
         }
 
         /// <summary>
+        /// Event handler for when the mouse is clicked in a non-scanner area
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
+        private void AppAgentMgr_EvtNonScannerMouseDown(object sender, MouseEventArgs e)
+        {
+            if (Context.AppAgentMgr.ActiveAgent != null && Context.AppAgentMgr.ActiveAgent.TextControlAgent == this)
+            {
+                OnMouseDown(e);
+            }
+        }
+
+        /// <summary>
         /// Dispose resources
         /// </summary>
         /// <param name="disposing">is it disposing?</param>
@@ -1174,6 +1162,8 @@ namespace ACAT.Lib.Core.AgentManagement.TextInterface
 
                 if (disposing)
                 {
+                    Context.AppAgentMgr.EvtNonScannerMouseDown -= AppAgentMgr_EvtNonScannerMouseDown;
+
                     OnDispose();
                 }
                 // Release unmanaged resources.

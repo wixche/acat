@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////
 // <copyright file="Log.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,50 +22,19 @@
 
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
 using System.Threading;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
     /// <summary>
     /// Handles logging application messages of a variety of criticalities (Debug - Fatal)
+    /// Debug log messages are sent to the debug console (can be viewed using the DebugView
+    /// utility from SysInternals) and they are also logged to a file.
+    /// Note:  Debug logging should be turned on only for troubleshooting.  It can
+    /// slow down the app. Also, the debug file sizes can get pretty big and ACAT
+    /// doesn't automatically cleanup. The user should delete these files manually.
     /// </summary>
     public class Log
     {
@@ -95,7 +64,7 @@ namespace ACAT.Lib.Core.Utility
         private const string LogFileName = "ACATLog.txt";
 
         /// <summary>
-        /// Full path to the log file
+        /// Full path to the log file in which the debug messages are stored
         /// </summary>
         private static readonly String logFileFullPath;
 
@@ -156,11 +125,11 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugLogMessagesToFile)
-                {
-                    var listener = new TextWriterTraceListener(logFileFullPath, "ACATDebugListener");
-                    Trace.Listeners.Add(listener);
-                }
+            if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugLogMessagesToFile)
+            {
+                var listener = new TextWriterTraceListener(logFileFullPath, "ACATDebugListener");
+                Trace.Listeners.Add(listener);
+            }
 #if !DEBUG
             }
 #endif
@@ -183,8 +152,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("DEBUG", new StackTrace().GetFrame(1));
-                Trace.WriteLine(output);
+            string output = formatClassNameAndMethod("DEBUG", new StackTrace().GetFrame(1));
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -199,8 +168,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("DEBUG", new StackTrace().GetFrame(1)) + message;
-                Trace.WriteLine(output);
+            string output = formatClassNameAndMethod("DEBUG", new StackTrace().GetFrame(1)) + message;
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -222,8 +191,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = "DEBUG: " + message + " StackTrace:" + exc.StackTrace;
-                Trace.WriteLine(output);
+            string output = "DEBUG: " + message + " StackTrace:" + exc.StackTrace;
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -239,8 +208,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("INFO", new StackTrace().GetFrame(1)) + message;
-                Trace.WriteLine(output);
+            string output = formatClassNameAndMethod("INFO", new StackTrace().GetFrame(1)) + message;
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -257,8 +226,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = "INFO: " + message + " StackTrace:" + exc.StackTrace;
-                Trace.WriteLine(output);
+            string output = "INFO: " + message + " StackTrace:" + exc.StackTrace;
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -274,8 +243,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("WARN", new StackTrace().GetFrame(1)) + message;
-                Trace.WriteLine(output);
+            string output = formatClassNameAndMethod("WARN", new StackTrace().GetFrame(1)) + message;
+            Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -292,8 +261,8 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = "WARN: " + message + " StackTrace:" + exc.StackTrace;
-                System.Diagnostics.Trace.WriteLine(output);
+            string output = "WARN: " + message + " StackTrace:" + exc.StackTrace;
+            System.Diagnostics.Trace.WriteLine(output);
 #if !DEBUG
             }
 #endif
@@ -309,12 +278,12 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("ERROR", new StackTrace().GetFrame(1)) + message;
-                Trace.WriteLine(output);
-                if (CoreGlobals.AppPreferences.DebugAssertOnError)
-                {
-                    Trace.Assert(AssertionMode);
-                }
+            string output = formatClassNameAndMethod("ERROR", new StackTrace().GetFrame(1)) + message;
+            Trace.WriteLine(output);
+            if (CoreGlobals.AppPreferences.DebugAssertOnError)
+            {
+                Trace.Assert(AssertionMode);
+            }
 #if !DEBUG
             }
 #endif
@@ -331,12 +300,12 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = "ERROR: " + message + " StackTrace:" + exc.StackTrace;
-                Trace.WriteLine(output);
-                if (CoreGlobals.AppPreferences.DebugAssertOnError)
-                {
-                    Trace.Assert(AssertionMode);
-                }
+            string output = "ERROR: " + message + " StackTrace:" + exc.StackTrace;
+            Trace.WriteLine(output);
+            if (CoreGlobals.AppPreferences.DebugAssertOnError)
+            {
+                Trace.Assert(AssertionMode);
+            }
 #if !DEBUG
             }
 #endif
@@ -352,12 +321,12 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = formatClassNameAndMethod("FATAL", new StackTrace().GetFrame(1)) + message;
-                Trace.WriteLine(output);
-                if (CoreGlobals.AppPreferences.DebugAssertOnError)
-                {
-                    Trace.Assert(AssertionMode);
-                }
+            string output = formatClassNameAndMethod("FATAL", new StackTrace().GetFrame(1)) + message;
+            Trace.WriteLine(output);
+            if (CoreGlobals.AppPreferences.DebugAssertOnError)
+            {
+                Trace.Assert(AssertionMode);
+            }
 #if !DEBUG
             }
 #endif
@@ -374,12 +343,12 @@ namespace ACAT.Lib.Core.Utility
             if (CoreGlobals.AppPreferences != null && CoreGlobals.AppPreferences.DebugMessagesEnable)
             {
 #endif
-                string output = "FATAL: " + message + " StackTrace:" + exc.StackTrace;
-                Trace.WriteLine(output);
-                if (CoreGlobals.AppPreferences.DebugAssertOnError)
-                {
-                    Trace.Assert(AssertionMode);
-                }
+            string output = "FATAL: " + message + " StackTrace:" + exc.StackTrace;
+            Trace.WriteLine(output);
+            if (CoreGlobals.AppPreferences.DebugAssertOnError)
+            {
+                Trace.Assert(AssertionMode);
+            }
 #if !DEBUG
             }
 #endif

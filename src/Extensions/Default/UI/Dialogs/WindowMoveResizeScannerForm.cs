@@ -1,7 +1,6 @@
-﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="WindowMoveResizeScannerForm.cs" company="Intel Corporation">
+﻿// <copyright file="WindowMoveResizeScannerForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +17,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Security.Permissions;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
@@ -75,14 +40,20 @@ namespace ACAT.Extensions.Default.UI.Dialogs
     /// the user to send the arrow key strokes to the
     /// application window so it can be moved or resized.
     /// </summary>
-    [DescriptorAttribute("AB688D22-7302-48C8-92A0-1F47EE38147E", "WindowMoveResizeScannerForm",
+    [DescriptorAttribute("AB688D22-7302-48C8-92A0-1F47EE38147E",
+                        "WindowMoveResizeScannerForm",
                         "Window Move/Resize Dialog")]
-    public partial class WindowMoveResizeScannerForm : Form, IDialogPanel
+    public partial class WindowMoveResizeScannerForm : Form, IDialogPanel, IExtension
     {
+        /// <summary>
+        /// Used to invoke methods and properties in this class
+        /// </summary>
+        private readonly ExtensionInvoker _invoker;
+
         /// <summary>
         /// The dialogCommon object
         /// </summary>
-        private readonly DialogCommon _dialogCommon;
+        private DialogCommon _dialogCommon;
 
         /// <summary>
         /// Initializes a new instance of the class.
@@ -91,16 +62,12 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             InitializeComponent();
 
-            _dialogCommon = new DialogCommon(this);
+            _invoker = new ExtensionInvoker(this);
+
             Title.Hide();
 
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
-
-            Load += ResizeScannerScreen_Load;
-            FormClosing += ResizeScannerScreen_FormClosing;
+            Load += WindowMoveResizeScannerForm_Load;
+            FormClosing += WindowMoveResizeScannerForm_FormClosing;
         }
 
         /// <summary>
@@ -110,6 +77,21 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             get { return DescriptorAttribute.GetDescriptor(GetType()); }
         }
+
+        /// <summary>
+        /// Perform move operation on target window
+        /// </summary>
+        public bool MoveWindow { get; set; }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
+
+        /// <summary>
+        /// Perform resize operation on target window
+        /// </summary>
+        public bool ResizeWindow { get; set; }
 
         /// <summary>
         /// Gets the sync object
@@ -138,6 +120,35 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Don't steal focus
+        /// </summary>
+        protected override bool ShowWithoutActivation
+        {
+            get { return true; }
+        }
+
+        /// <summary>
+        /// Returns the extension invoker object
+        /// </summary>
+        /// <returns>The invoker object</returns>
+        public ExtensionInvoker GetInvoker()
+        {
+            return _invoker;
+        }
+
+        /// <summary>
+        /// Intitializes the class
+        /// </summary>
+        /// <param name="startupArg">startup param</param>
+        /// <returns>true on success</returns>
+        public bool Initialize(StartupArg startupArg)
+        {
+            _dialogCommon = new DialogCommon(this);
+
+            return _dialogCommon.Initialize(startupArg);
+        }
+
+        /// <summary>
         /// Triggered when a widget is actuated
         /// </summary>
         /// <param name="widget">Which one triggered?</param>
@@ -154,7 +165,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 return;
             }
 
-            Invoke(new MethodInvoker(delegate()
+            Invoke(new MethodInvoker(delegate
             {
                 switch (value)
                 {
@@ -244,9 +255,28 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Form is closing. Release resources
+        /// Sends commands to the target window to enable moving/
+        /// resizing
         /// </summary>
-        private void ResizeScannerScreen_FormClosing(object sender, FormClosingEventArgs e)
+        private void setMoveResizeMode()
+        {
+            Context.AppAgentMgr.Keyboard.Send(Keys.LMenu, Keys.Space);
+            Thread.Sleep(500);
+
+            if (MoveWindow)
+            {
+                Context.AppAgentMgr.Keyboard.Send(Keys.M);
+            }
+            else if (ResizeWindow)
+            {
+                Context.AppAgentMgr.Keyboard.Send(Keys.S);
+            }
+        }
+
+        /// <summary>
+        /// Form is closing. Releases resources
+        /// </summary>
+        private void WindowMoveResizeScannerForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _dialogCommon.OnClosing();
         }
@@ -254,10 +284,12 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// <summary>
         /// Form has been loaded
         /// </summary>
-        private void ResizeScannerScreen_Load(object sender, EventArgs e)
+        private void WindowMoveResizeScannerForm_Load(object sender, EventArgs e)
         {
             _dialogCommon.OnLoad();
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            EnumWindows.RestoreFocusToTopWindow(Handle.ToInt32());
+            setMoveResizeMode();
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
     }
 }

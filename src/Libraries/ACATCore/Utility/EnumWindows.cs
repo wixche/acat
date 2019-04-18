@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="WindowsAccess.cs" company="Intel Corporation">
+// <copyright file="EnumWindows.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.PanelManagement;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
+using System.Diagnostics;
 using System.Text;
 using System.Windows.Forms;
-using ACAT.Lib.Core.PanelManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
@@ -68,12 +32,32 @@ namespace ACAT.Lib.Core.Utility
     /// </summary>
     public static class EnumWindows
     {
-        private const int GCL_HICON = -14;
-        private const int GCL_HICONSM = -34;
-        private const int ICON_BIG = 1;
-        private const int ICON_SMALL = 0;
-        private const int ICON_SMALL2 = 2;
-        private const int WM_GETICON = 0x7F;
+        /// <summary>
+        /// Ignore windows with these class names during enumeration
+        /// </summary>
+        private static readonly string[] _ignoreClassNames =
+        {
+            "MsgrIMEWindowClass",
+            "SysShadow",
+            "Button",
+            "Shell_TrayWnd",
+            "DV2ControlHost"
+        };
+
+        /// <summary>
+        /// This process
+        /// </summary>
+        private static Process _currentProcess;
+
+        /// <summary>
+        /// Whether to exclude windows from this process
+        /// </summary>
+        private static bool _excludeThisProcess;
+
+        /// <summary>
+        /// Handle to windows shell
+        /// </summary>
+        private static IntPtr _shellWindowHandle;
 
         /// <summary>
         /// Holds the list of active windows
@@ -84,64 +68,41 @@ namespace ACAT.Lib.Core.Utility
         /// Synchronously enumerates windows and returns a window list
         /// </summary>
         /// <returns>list of windows</returns>
-        public static List<WindowInfo> Enumerate()
+        public static List<WindowInfo> Enumerate(bool excludeThisProcess = true)
         {
+            _currentProcess = Process.GetCurrentProcess();
+            _excludeThisProcess = excludeThisProcess;
+            _shellWindowHandle = User32Interop.GetShellWindow();
+
             windowList = new List<WindowInfo>();
             User32Interop.EnumDesktopWindows(IntPtr.Zero, enumWindowsCallback, IntPtr.Zero);
+
             return windowList;
         }
 
         /// <summary>
-        /// Gets the icon associated with the specified window
+        /// Sets focus to the top window in the Z Order (including
+        /// window in this application)
         /// </summary>
-        /// <param name="winHandle">window handle</param>
-        /// <returns>the icon, null if it can't find one</returns>
-        public static Icon GetAppIcon(IntPtr winHandle)
+        /// <param name="ignoreHandle">ignore this window</param>
+        public static void RestoreFocusToTopWindow(int ignoreHandle = 0)
         {
-            Log.Debug("hWnd=" + winHandle);
-
-            IntPtr hIcon = User32Interop.SendMessage(winHandle, WM_GETICON, ICON_BIG, 0);
-
-            if (hIcon == IntPtr.Zero)
-            {
-                hIcon = User32Interop.SendMessage(winHandle, WM_GETICON, ICON_SMALL, 0);
-                if (hIcon == IntPtr.Zero)
-                {
-                    hIcon = User32Interop.SendMessage(winHandle, WM_GETICON, ICON_SMALL2, 0);
-                    if (hIcon == IntPtr.Zero)
-                    {
-                        hIcon = getClassLongPtr(winHandle, GCL_HICON);
-                        if (hIcon == IntPtr.Zero)
-                        {
-                            hIcon = getClassLongPtr(winHandle, GCL_HICONSM);
-                            if (hIcon == IntPtr.Zero)
-                            {
-                                return null;
-                            }
-                        }
-                    }
-                }
-            }
-
-            Icon icon = null;
-            if (hIcon != IntPtr.Zero)
-            {
-                icon = Icon.FromHandle(hIcon);
-            }
-
-            return icon;
-        }
-
-        static public void RestoreFocusToTopWindow()
-        {
-            var winList = Enumerate();
+            var winList = Enumerate(false);
             Log.Debug("winList Count: " + winList.Count);
             bool found = false;
             var handle = IntPtr.Zero;
+            IntPtr ignoreWindowHandle = new IntPtr(ignoreHandle);
+
             foreach (var windowInfo in winList)
             {
                 //Log.Debug("Title: " + w.Title);
                 handle = windowInfo.Handle;
+
+                if (ignoreHandle != 0 && handle == ignoreWindowHandle)
+                {
+                    continue;
+                }
+
                 var control = Form.FromHandle(handle);
                 if (control is IDialogPanel)
                 {
@@ -150,9 +111,12 @@ namespace ACAT.Lib.Core.Utility
                     break;
                 }
 
+                // we don't want to set focus to the DebugView window
+                // as it causes ACAT to freeze.  DebugVIew is a SysInternals
+                // utility used to display debug messages from ACAT
                 if (!windowInfo.Title.Contains("DebugView") &&
                     !Windows.IsMinimized(handle) &&
-                    !(control is ContextualMenuBase) &&
+                    !(control is MenuPanelBase) &&
                     !(control is IScannerPanel))
                 {
                     Log.Debug("Found top window " + windowInfo.Title);
@@ -173,6 +137,83 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Restores focus to the top window on the desktop, excluding
+        /// windows in this application
+        /// </summary>
+        public static void RestoreFocusToTopWindowOnDesktop()
+        {
+            var winList = Enumerate();
+            Log.Debug("winList Count: " + winList.Count);
+            bool found = false;
+            var handle = IntPtr.Zero;
+
+            foreach (var windowInfo in winList)
+            {
+                //Log.Debug("Title: " + w.Title);
+                handle = windowInfo.Handle;
+
+                // we don't want to set focus to the DebugView window
+                // as it causes ACAT to freeze.  DebugVIew is a SysInternals
+                // utility used to display debug messages from ACAT
+                if (!windowInfo.Title.Contains("DebugView") &&
+                    !Windows.IsMinimized(handle))
+                {
+                    Log.Debug("Found top window " + windowInfo.Title);
+                    found = true;
+                    break;
+                }
+            }
+
+            //Log.Debug("found: " + found);
+            if (!found || handle == IntPtr.Zero)
+            {
+                Windows.SetFocusToDesktop();
+            }
+            else
+            {
+                Windows.SetForegroundWindow(handle);
+            }
+        }
+
+        /// <summary>
+        /// Verifies whether the window can be activated
+        /// </summary>
+        /// <param name="hWnd">WIndow handle</param>
+        /// <returns>true if it can</returns>
+        private static bool canBeActivated(IntPtr hWnd)
+        {
+            if (isShellWindow(hWnd))
+            {
+                return false;
+            }
+
+            var root = User32Interop.GetAncestor(hWnd, User32Interop.GetAncestorFlags.GetRootOwner);
+
+            if (getWindowPopup(root) != hWnd)
+            {
+                return false;
+            }
+
+            var className = Windows.GetWindowClassName(hWnd);
+            if (String.IsNullOrEmpty(className))
+            {
+                return false;
+            }
+
+            if (Array.IndexOf(_ignoreClassNames, className) > -1)
+            {
+                return false;
+            }
+
+            if (className.StartsWith("WMP9MediaBarFlyout"))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Callback function for the enumwindows function
         /// </summary>
         /// <param name="winHandle">enumerated window handle</param>
@@ -180,6 +221,37 @@ namespace ACAT.Lib.Core.Utility
         /// <returns></returns>
         private static bool enumWindowsCallback(IntPtr winHandle, int lParam)
         {
+            if (!User32Interop.IsWindowVisible(winHandle))
+            {
+                return true;
+            }
+
+            if (_excludeThisProcess)
+            {
+                uint pid = 0;
+                User32Interop.GetWindowThreadProcessId(winHandle, out pid);
+
+                if (pid == 0 || pid == _currentProcess.Id)
+                {
+                    return true;
+                }
+            }
+
+            if (!Windows.IsApplicationWindow(winHandle))
+            {
+                return true;
+            }
+
+            if (!canBeActivated(winHandle))
+            {
+                return true;
+            }
+
+            if (Windows.IsCloakedWindow(winHandle))
+            {
+                return true;
+            }
+
             var buffer = new StringBuilder(1024);
             User32Interop.GetWindowText(winHandle, buffer, buffer.Capacity);
             var windowTitle = buffer.ToString();
@@ -188,8 +260,7 @@ namespace ACAT.Lib.Core.Utility
             // and has an app icon (this criterium is needed to not display "Start" and "Program Manager")
             // this can be altered in the future to add other filtering criteria
 
-            if (User32Interop.IsWindowVisible(winHandle) &&
-                (!string.IsNullOrEmpty(windowTitle)) && (GetAppIcon(winHandle) != null))
+            if (!string.IsNullOrEmpty(windowTitle))
             {
                 Log.Debug("hWnd=" + winHandle + "  windowTitle=" + windowTitle);
 
@@ -202,27 +273,43 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
-        /// Gets window class long pointer for hWnd
+        /// Gets the pop window (if any) of the specified window
         /// </summary>
-        /// <param name="hWnd">window handle</param>
-        /// <param name="nIndex">index number</param>
-        /// <returns>window class long</returns>
-        private static IntPtr getClassLongPtr(IntPtr hWnd, int nIndex)
+        /// <param name="window">Window handle</param>
+        /// <returns>handle if found, IntPtr.Zero else</returns>
+        private static IntPtr getWindowPopup(IntPtr window)
         {
-            try
+            var windowLevel = 32;
+            var targetWindow = window;
+
+            while (windowLevel-- > 0)
             {
-                if (IntPtr.Size > 4)
+                IntPtr popupWindow = User32Interop.GetLastActivePopup(targetWindow);
+
+                if (User32Interop.IsWindowVisible(popupWindow))
                 {
-                    return User32Interop.GetClassLongPtr64(hWnd, nIndex);
+                    return popupWindow;
                 }
 
-                uint ret = User32Interop.GetClassLongPtr32(hWnd, nIndex);
-                return new IntPtr((int)ret);  // without the cast, it may result in an overflow
+                if (popupWindow == targetWindow)
+                {
+                    return IntPtr.Zero;
+                }
+
+                targetWindow = popupWindow;
             }
-            catch
-            {
-                return IntPtr.Zero;
-            }
+
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Checks if the specified handle is the shell window handle
+        /// </summary>
+        /// <param name="hWnd">handle to check</param>
+        /// <returns>true if it is</returns>
+        private static bool isShellWindow(IntPtr hWnd)
+        {
+            return (hWnd == _shellWindowHandle);
         }
 
         /// <summary>

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="SAPIEngine.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,60 +18,27 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Speech.Synthesis;
 using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.TTSManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Speech.Synthesis;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Default.TTSEngines
+namespace ACAT.Extensions.Default.TTSEngines.SAPIEngine
 {
     /// <summary>
     /// Converts text to speech by sending the text string to the
     /// Microsoft Speech Synthesizer
     /// </summary>
-    [DescriptorAttribute("B7AB6188-AE23-40E3-9E6A-F8AA8A81E2BF", "SAPI TTS Engine",
-                            "Text to Speech using Microsoft SAPI")]
-    public class SAPIEngine : ExtensionInvoker, ITTSEngine
+    [DescriptorAttribute("B7AB6188-AE23-40E3-9E6A-F8AA8A81E2BF",
+                        "Speech Synthesizer TTS Engine",
+                        "Text to Speech based on the Microsoft Speech Synthesizer")]
+    public class SAPIEngine : ExtensionInvoker, ITTSEngine, ISupportsPreferences
     {
         /// <summary>
         /// Settings for this engine
@@ -79,14 +46,19 @@ namespace ACAT.Extensions.Default.TTSEngines
         internal static SAPISettings SAPISettings;
 
         /// <summary>
-        /// Minimum value of rate of speech
-        /// </summary>
-        private const int MinRate = -10;
-
-        /// <summary>
         /// Max value of rate of speech
         /// </summary>
         private const int MaxRate = 10;
+
+        /// <summary>
+        /// Max value of speech volume
+        /// </summary>
+        private const int MaxVolume = 100;
+
+        /// <summary>
+        /// Minimum value of rate of speech
+        /// </summary>
+        private const int MinRate = -10;
 
         /// <summary>
         /// Minimum value of speech volume
@@ -94,24 +66,14 @@ namespace ACAT.Extensions.Default.TTSEngines
         private const int MinVolume = 0;
 
         /// <summary>
-        /// Max value of speech volume
-        /// </summary>
-        private const int MaxVolume = 100;
-        
-        /// <summary>
         /// Name of the settings file
         /// </summary>
-        private const String settingsFileName = "SAPIEngineSettings.xml";
-
-        /// <summary>
-        /// The alternate pronunciations file
-        /// </summary>
-        private readonly Pronunciations _pronunciations = new Pronunciations();
+        internal const String SettingsFileName = "SAPIEngineSettings.xml";
 
         /// <summary>
         /// Has this object been disposed
         /// </summary>
-        private bool _disposed = false;
+        private bool _disposed;
 
         /// <summary>
         /// Is speech muted?
@@ -129,6 +91,11 @@ namespace ACAT.Extensions.Default.TTSEngines
         private int _preMuteVolumeLevel;
 
         /// <summary>
+        /// The alternate pronunciations file
+        /// </summary>
+        private Pronunciations _pronunciations;
+
+        /// <summary>
         /// The Microsoft speech synthesizer object
         /// </summary>
         private SpeechSynthesizer _speechSynthesizer;
@@ -138,10 +105,11 @@ namespace ACAT.Extensions.Default.TTSEngines
         /// </summary>
         public SAPIEngine()
         {
+            SAPISettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
+            SAPISettings = SAPISettings.Load();
+
             Synthesizer.SetOutputToDefaultAudioDevice();
-            Synthesizer.StateChanged += speechSynthesizer_StateChanged;
             Synthesizer.BookmarkReached += speechSynthesizer_BookmarkReached;
-            Synthesizer.SpeakCompleted += speechSynthesizer_SpeakCompleted;
         }
 
 #pragma warning disable
@@ -167,6 +135,11 @@ namespace ACAT.Extensions.Default.TTSEngines
         public event TTSVoiceChanged EvtVoiceChanged;
 
 #pragma warning enable
+
+        /// <summary>
+        /// Gets or sets the culture info for the voice to use
+        /// </summary>
+        public CultureInfo Culture { get; set; }
 
         /// <summary>
         /// Gets the descriptor for this class
@@ -199,11 +172,11 @@ namespace ACAT.Extensions.Default.TTSEngines
         }
 
         /// <summary>
-        /// Gets whether we support a settings dialog. we don't
+        /// Gets whether this supports a custom settings dialog
         /// </summary>
-        public bool SupportsSettingsDialog
+        public virtual bool SupportsPreferencesDialog
         {
-            get { return false; }
+            get { return true; }
         }
 
         /// <summary>
@@ -222,17 +195,7 @@ namespace ACAT.Extensions.Default.TTSEngines
         /// </summary>
         private SpeechSynthesizer Synthesizer
         {
-            get
-            {
-                if (_speechSynthesizer == null)
-                {
-                    _speechSynthesizer = new SpeechSynthesizer { Rate = 0, Volume = 100 };
-                    _speechSynthesizer.StateChanged += speechSynthesizer_StateChanged;
-
-                    return _speechSynthesizer;
-                }
-                return _speechSynthesizer;
-            }
+            get { return _speechSynthesizer ?? (_speechSynthesizer = new SpeechSynthesizer {Rate = 0, Volume = 100}); }
         }
 
         /// <summary>
@@ -248,6 +211,15 @@ namespace ACAT.Extensions.Default.TTSEngines
         }
 
         /// <summary>
+        /// Returns the default preferences (factory settings)
+        /// </summary>
+        /// <returns>Default preferences object</returns>
+        public IPreferences GetDefaultPreferences()
+        {
+            return SAPISettings.LoadDefaults<SAPISettings>();
+        }
+
+        /// <summary>
         /// Pitch of speech.  Value is engine-dependent. SAPI
         /// doesn't support it
         /// </summary>
@@ -257,20 +229,20 @@ namespace ACAT.Extensions.Default.TTSEngines
         }
 
         /// <summary>
+        /// Returns the preferences object
+        /// </summary>
+        /// <returns>The preferences object</returns>
+        public IPreferences GetPreferences()
+        {
+            return SAPISettings;
+        }
+
+        /// <summary>
         /// Rate of speech.  Value is engine-dependent
         /// </summary>
         public TTSValue GetRate()
         {
             return new TTSValue(MinRate, MaxRate, Synthesizer.Rate);
-        }
-
-        /// <summary>
-        /// Not supported
-        /// </summary>
-        /// <returns></returns>
-        public ITTSSettingsDialog GetSettingsDialog()
-        {
-            return null;
         }
 
         /// <summary>
@@ -295,8 +267,8 @@ namespace ACAT.Extensions.Default.TTSEngines
         /// </summary>
         public TTSValue GetVolume()
         {
-            return new TTSValue(MinVolume, 
-                                MaxVolume, 
+            return new TTSValue(MinVolume,
+                                MaxVolume,
                                 IsMuted() ? _preMuteVolumeLevel : Synthesizer.Volume);
         }
 
@@ -304,11 +276,19 @@ namespace ACAT.Extensions.Default.TTSEngines
         /// Call this first.  Initializes the speech engine
         /// </summary>
         /// <returns>true on success</returns>
-        public bool Init()
+        public bool Init(CultureInfo ci)
         {
-            LoadSettings();
+            var ins = Synthesizer.GetInstalledVoices();
 
-            _pronunciations.Load(UserManager.GetFullPath(SAPISettings.PronunciationsFile));
+            foreach (InstalledVoice iv in ins)
+            {
+                Log.Debug("Found installed voice: " + iv.VoiceInfo.Name +
+                            "Gender " + iv.VoiceInfo.Gender +
+                            ", age: " + iv.VoiceInfo.Age +
+                            ", culture: " + iv.VoiceInfo.Culture.Name);
+            }
+
+            loadPronunciations(ci);
 
             setSpeechSynthSettings();
 
@@ -322,18 +302,6 @@ namespace ACAT.Extensions.Default.TTSEngines
         public bool IsMuted()
         {
             return _muted;
-        }
-
-        /// <summary>
-        /// Loads TTS settings from the settings file
-        /// </summary>
-        /// <returns>true on success, false on failure</returns>
-        public bool LoadSettings()
-        {
-            SAPISettings.PreferencesFilePath = UserManager.GetFullPath(settingsFileName);
-            SAPISettings = SAPISettings.Load();
-
-            return true;
         }
 
         /// <summary>
@@ -440,6 +408,18 @@ namespace ACAT.Extensions.Default.TTSEngines
                 Synthesizer.Volume = volume;
                 notifyPropertyChanged();
             }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Shows the preferences dialog
+        /// </summary>
+        /// <returns>true on success</returns>
+        public virtual bool ShowPreferencesDialog()
+        {
+            var form = new SettingsForm();
+            form.ShowDialog();
 
             return true;
         }
@@ -574,12 +554,26 @@ namespace ACAT.Extensions.Default.TTSEngines
         {
             if (_speechSynthesizer != null)
             {
-                _speechSynthesizer.StateChanged -= speechSynthesizer_StateChanged;
                 _speechSynthesizer.BookmarkReached -= speechSynthesizer_BookmarkReached;
-                _speechSynthesizer.SpeakCompleted -= speechSynthesizer_SpeakCompleted;
                 _speechSynthesizer.Dispose();
                 _speechSynthesizer = null;
             }
+        }
+
+        /// <summary>
+        /// Reads alternate pronunciations from the pronunciations file
+        /// </summary>
+        /// <returns>true on success</returns>
+        private bool loadPronunciations(CultureInfo ci)
+        {
+            if (_pronunciations != null)
+            {
+                _pronunciations.Dispose();
+            }
+
+            _pronunciations = new Pronunciations();
+
+            return _pronunciations.Load(ci, SAPISettings.PronunciationsFile);
         }
 
         /// <summary>
@@ -623,8 +617,26 @@ namespace ACAT.Extensions.Default.TTSEngines
         /// </summary>
         private void setSpeechSynthSettings()
         {
-            SetVolume(SAPISettings.Volume);
-            SetRate(SAPISettings.Rate);
+            try
+            {
+                SetVolume(SAPISettings.Volume);
+                SetRate(SAPISettings.Rate);
+
+                if (!String.IsNullOrEmpty(SAPISettings.Voice))
+                {
+                    _speechSynthesizer.SelectVoice(SAPISettings.Voice);
+                }
+                else
+                {
+                    _speechSynthesizer.SelectVoiceByHints(SAPISettings.Gender, VoiceAge.NotSet, 0,
+                        CultureInfo.DefaultThreadCurrentUICulture);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Error setting TTS settings " + ex);
+            }
+            
         }
 
         /// <summary>
@@ -642,26 +654,8 @@ namespace ACAT.Extensions.Default.TTSEngines
             }
             catch (Exception ex)
             {
-                Log.Debug("Invalid bookmark " + e.Bookmark);
+                Log.Debug("Invalid bookmark " + e.Bookmark + ", exception: " + ex);
             }
-        }
-
-        /// <summary>
-        /// Handler for when speech completes
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void speechSynthesizer_SpeakCompleted(object sender, SpeakCompletedEventArgs e)
-        {
-        }
-
-        /// <summary>
-        /// Not used
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void speechSynthesizer_StateChanged(object sender, StateChangedEventArgs e)
-        {
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TextUtils.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,60 +19,17 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Windows.Forms;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
     /// <summary>
-    /// Useful text functions.  The SwiftKeys prediction engine needs the
-    /// previous words in the current sentence PLUS the current word to
-    /// make the current word and the next word prediction.  This class
-    /// contains functions to get the current sentence, current word etc.
+    /// Useful text functions.  This class contains functions to get the current sentence,
+    /// current word, current paragraph, words preceding the caret, preceding spaces etc etc.
     /// </summary>
     public class TextUtils
     {
-        private const String SentenceTerminators = ".?!";
-
-        //private static String _terminators = "\".?!,:;‘’“”";
-        private const String Terminators = ".?!,:;‘";
-
         /// <summary>
         /// Converts a byte array into a hex string
         /// </summary>
@@ -180,7 +137,7 @@ namespace ACAT.Lib.Core.Utility
 
                 // cursor is at a sentence terminator.  needs
                 // insertion
-                if (TextUtils.IsSentenceTerminator(inputString[index]))
+                if (IsSentenceTerminator(inputString[index]))
                 {
                     insertOrReplaceOffset = caretPos + 1;
                     Log.Debug("is sentence terminator. return true " + insertOrReplaceOffset);
@@ -188,9 +145,9 @@ namespace ACAT.Lib.Core.Utility
                 }
 
                 // cursor is at a word.  Needs to be replaced
-                if (TextUtils.IsWordElement(inputString[index]))
+                if (IsWordElement(inputString[index]))
                 {
-                    insertOrReplaceOffset = TextUtils.getWordToReplace(inputString, caretPos, out wordToReplace);
+                    insertOrReplaceOffset = getWordToReplace(inputString, caretPos, out wordToReplace);
                     Log.Debug("iswordelement is true.  return false " + insertOrReplaceOffset);
                     return false;
                 }
@@ -533,7 +490,6 @@ namespace ACAT.Lib.Core.Utility
                 if (index < 0)
                 {
                     index = 0;
-                    count = endPos + 1;
                 }
                 else
                 {
@@ -624,6 +580,14 @@ namespace ACAT.Lib.Core.Utility
             }
         }
 
+        /// <summary>
+        /// Gets the word at the caret position. Empty string if there
+        /// is no word there
+        /// </summary>
+        /// <param name="inputString">Input text</param>
+        /// <param name="caretPos">Postion of the caret in the string</param>
+        /// <param name="wordAtCaret">returns the word at the caret position</param>
+        /// <returns>starting index of the word</returns>
         public static int GetWordAtCaret(String inputString, int caretPos, out String wordAtCaret)
         {
             try
@@ -781,6 +745,16 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Returns if the specified key is printable or not
+        /// </summary>
+        /// <param name="key">key to check</param>
+        /// <returns>true if it is</returns>
+        public static bool IsPrintable(Keys key)
+        {
+            return key == Keys.Enter || !char.IsControl((char)User32Interop.MapVirtualKey((int)key, 2));
+        }
+
+        /// <summary>
         /// Checks if the char is a punctuation or whitespace
         /// </summary>
         /// <param name="ch"></param>
@@ -797,7 +771,7 @@ namespace ACAT.Lib.Core.Utility
         /// <returns>true if so</returns>
         public static bool IsSentenceTerminator(char ch)
         {
-            return SentenceTerminators.LastIndexOf(ch) >= 0;
+            return ResourceUtils.LanguageSettings().IsSentenceTerminatorChar(ch);
         }
 
         /// <summary>
@@ -807,7 +781,7 @@ namespace ACAT.Lib.Core.Utility
         /// <returns>true if so</returns>
         public static bool IsTerminator(char ch)
         {
-            return Terminators.LastIndexOf(ch) >= 0;
+            return ResourceUtils.LanguageSettings().IsTerminatorChar(ch);
         }
 
         /// <summary>
@@ -840,7 +814,6 @@ namespace ACAT.Lib.Core.Utility
         /// <param name="caretPos">Where is the caret positioned at?</param>
         /// <param name="wordAtCaret">Returns word at caret (can be "")</param>
         /// <returns>0-based index where the word begins</returns>
-        ///
         private static int getWordToReplace(String inputString, int caretPos, out String wordAtCaret)
         {
             int startPos = caretPos;
@@ -878,7 +851,8 @@ namespace ACAT.Lib.Core.Utility
                 endPos = inputString.Length;
             }
 
-            Log.Debug("getWordAt: startpos, endpos = " + startPos.ToString() + ", " + endPos.ToString());
+            Log.Debug("getWordAt: startpos, endpos = " + startPos + ", " + endPos);
+
             int count = endPos - startPos;
             wordAtCaret = (count > 0) ? inputString.Substring(startPos, endPos - startPos) : String.Empty;
 

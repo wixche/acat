@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AgentsCache.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,56 +18,20 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AgentManagement
 {
     /// <summary>
     /// Maintains a cache of application agent objects.  The cache is
     /// populated by doing a directory walk of a base directory, dynamically
-    /// loading dlls that have IApplicationAgent objects, instantiating
+    /// loading DLL's that have IApplicationAgent objects, instantiating
     /// the objects and storing them in a table.
     /// Each application agent supports one or more processes (like notepad,
     /// ms word etc)
@@ -138,6 +102,10 @@ namespace ACAT.Lib.Core.AgentManagement
         public void AddAgent(IntPtr handle, IApplicationAgent agent)
         {
             _adhocAgentTable[handle] = agent;
+            if (EvtAgentAdded != null)
+            {
+                EvtAgentAdded(agent);
+            }
         }
 
         /// <summary>
@@ -147,7 +115,7 @@ namespace ACAT.Lib.Core.AgentManagement
         public void AddAgentByType(Type type)
         {
             addAgent(type);
-            populateLookupTableByProcess();
+            //populateLookupTableByProcess();
         }
 
         /// <summary>
@@ -269,6 +237,38 @@ namespace ACAT.Lib.Core.AgentManagement
         }
 
         /// <summary>
+        /// Returns the agent object identified by the category
+        /// </summary>
+        /// <param name="category">Category to lookup</param>
+        /// <returns>Application agent object</returns>
+        public IApplicationAgent GetAgentByCategory(String category)
+        {
+            var retVal = _preferredAgents.GetPreferredAgentByCategory(category);
+            if (retVal == null)
+            {
+                foreach (var agent in _agentCache)
+                {
+                    if (String.Compare(category, agent.Descriptor.Category, true) == 0)
+                    {
+                        retVal = agent;
+                        break;
+                    }
+                }
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Returns a list of agent objects
+        /// </summary>
+        /// <returns>list of agent objects</returns>
+        public IEnumerable<object> GetExtensions()
+        {
+            return _agentCache;
+        }
+
+        /// <summary>
         /// Walks the list of diretories and loads agent DLL's and
         /// populates the cache
         /// </summary>
@@ -323,6 +323,8 @@ namespace ACAT.Lib.Core.AgentManagement
                 _agentCache.Add(agent);
                 _agentLookupTableById.Add(agent.Descriptor.Id, agent);
 
+                updateProcessLookupTable(agent);
+
                 if (EvtAgentAdded != null)
                 {
                     EvtAgentAdded(agent);
@@ -353,7 +355,7 @@ namespace ACAT.Lib.Core.AgentManagement
         {
             foreach (String dir in extensionDirs)
             {
-                String path = Path.Combine(dir, AgentManager.AppAgentsRootDir);
+                var path = Path.Combine(dir, AgentManager.AppAgentsRootDir);
                 loadAgentsFromDir(path);
 
                 path = Path.Combine(dir, AgentManager.FunctionalAgentsRootDir);
@@ -399,22 +401,40 @@ namespace ACAT.Lib.Core.AgentManagement
             // name to a list of agents that support it
             foreach (var agent in _agentCache)
             {
-                foreach (var processInfo in agent.ProcessesSupported)
-                {
-                    if (!String.IsNullOrEmpty(processInfo.Name))
-                    {
-                        List<IApplicationAgent> supportedAgents;
-                        String processName = processInfo.Name.ToLower();
-                        if (!_agentLookupTableByProcessName.ContainsKey(processInfo.Name))
-                        {
-                            supportedAgents = new List<IApplicationAgent>();
-                            _agentLookupTableByProcessName.Add(processName, supportedAgents);
-                        }
-                        else
-                        {
-                            supportedAgents = (List<IApplicationAgent>)_agentLookupTableByProcessName[processName];
-                        }
+                updateProcessLookupTable(agent);
+            }
+        }
 
+        private void updateProcessLookupTable(IApplicationAgent agent)
+        {
+            foreach (var processInfo in agent.ProcessesSupported)
+            {
+                if (!String.IsNullOrEmpty(processInfo.Name))
+                {
+                    List<IApplicationAgent> supportedAgents;
+                    var processName = processInfo.Name.ToLower();
+                    if (!_agentLookupTableByProcessName.ContainsKey(processName))
+                    {
+                        supportedAgents = new List<IApplicationAgent>();
+                        _agentLookupTableByProcessName.Add(processName, supportedAgents);
+                    }
+                    else
+                    {
+                        supportedAgents = (List<IApplicationAgent>)_agentLookupTableByProcessName[processName];
+                    }
+
+                    bool found = false;
+                    foreach (var supportedAgent in supportedAgents)
+                    {
+                        if (supportedAgent == agent)
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found)
+                    {
                         supportedAgents.Add(agent);
                     }
                 }

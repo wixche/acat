@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="FileOperationConfirmScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,57 +18,24 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
+using ACAT.ACATResources;
+using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension;
+using System;
+using System.IO;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
+namespace ACAT.Extensions.Default.FunctionalAgents.FileBrowserAgent
 {
     /// <summary>
     /// Displays a menu with options to confirm whether the
     /// user should open the file or delete it
     /// </summary>
-    [DescriptorAttribute("472AA253-2FB4-4FFC-A763-42C1717D5DF4", "FileOperationConfirmScanner",
+    [DescriptorAttribute("472AA253-2FB4-4FFC-A763-42C1717D5DF4",
+                        "FileOperationConfirmScanner",
                         "File Browser Operation Confirm Scanner")]
-    public partial class FileOperationConfirmScanner : ContextualMenu
+    public partial class FileOperationConfirmScanner : MenuPanel
     {
         /// <summary>
         /// Initializes a new instance of the class.
@@ -106,7 +73,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         {
             if (FInfo != null)
             {
-                if (!DialogUtils.ConfirmScanner("Delete " + FInfo.Name + "?"))
+                if (!DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentForm(),
+                                                String.Format(R.GetString("DeleteFileQ"), FInfo.Name)))
                 {
                     return;
                 }
@@ -124,7 +92,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         {
             if (FInfo != null)
             {
-                if (!DialogUtils.ConfirmScanner("Open " + FInfo.Name + "?"))
+                if (!DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentForm(),
+                                                String.Format(R.GetString("OpenFileQ"), FInfo.Name)))
                 {
                     return;
                 }

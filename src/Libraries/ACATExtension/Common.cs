@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Common.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,13 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.IO;
+using System.Reflection;
+using ACAT.Lib.Core.CommandManagement;
+using ACAT.Lib.Core.UserManagement;
 
 namespace ACAT.Lib.Extension
 {
@@ -76,6 +44,8 @@ namespace ACAT.Lib.Extension
         /// </summary>
         public static void Init()
         {
+            var assembly = Assembly.GetExecutingAssembly();
+            Log.Debug("Assembly name: " + assembly.FullName);
         }
 
         /// <summary>
@@ -83,6 +53,7 @@ namespace ACAT.Lib.Extension
         /// </summary>
         public static void PreInit()
         {
+
             // Load private fonts
             Fonts.LoadFontsFromDir(FileUtils.GetFontsDir());
             Fonts.LoadFontsFromDir(FileUtils.GetUserFontsDir());
@@ -99,17 +70,20 @@ namespace ACAT.Lib.Extension
         }
 
         /// <summary>
-        /// Event handler for when the screen manager initializes. Add any
-        /// Scanners in this library to the screen manager cache. This is because
-        /// the screen manager only looks at the extension folders for scanners and
-        /// this DLL does not reside int he extension folder.
+        /// Event handler for when the Panel Manager initializes. Add any
+        /// Scanners in this library to the Panel Manager cache. This is because
+        /// the Panel Manager only looks at the extension folders for scanners and
+        /// this DLL does not reside in the extension folder.
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event arg</param>
         private static void AppPanelManager_EvtStartupAddForms(object sender, EventArgs e)
         {
-            Context.AppPanelManager.AddFormToCache(typeof(ContextualMenuMinimal));
-            Context.AppPanelManager.AddFormToCache(typeof(ContextualMenu));
+            Context.AppPanelManager.AddFormToCache(typeof(MenuPanel));
+            Context.AppPanelManager.AddFormToCache(typeof(HorizontalStripScanner));
+            Context.AppPanelManager.AddFormToCache(typeof(HorizontalStripScanner2));
         }
+
+        
     }
 }

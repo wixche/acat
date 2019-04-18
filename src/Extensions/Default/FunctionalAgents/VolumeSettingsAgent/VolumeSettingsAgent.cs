@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="VolumeSettingsAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,13 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
+using System;
+using System.Windows.Forms;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
+namespace ACAT.Extensions.Default.FunctionalAgents.VolumeSettings
 {
     /// <summary>
     /// Functional agent that allows the user to set the volume
@@ -68,8 +32,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
     /// different TTS engines have different ranges.  The value
     /// is then scaled by the TTS engine before setting it.
     /// </summary>
-    [DescriptorAttribute("6D6F94CF-154B-4911-84CD-71CBA07424A3", "Volume Settings Agent",
-                        "Agent to set volume of speech engine")]
+    [DescriptorAttribute("6D6F94CF-154B-4911-84CD-71CBA07424A3",
+                        "Volume Settings",
+                        "VolumeSettingsAgent",
+                        "Set volume of speech engine")]
     internal class VolumeSettingsAgent : FunctionalAgentBase
     {
         /// <summary>
@@ -82,7 +48,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// </summary>
         public VolumeSettingsAgent()
         {
-            Name = "Volume Settings Agent";
+            Name = DescriptorAttribute.GetDescriptor(GetType()).Name;
         }
 
         /// <summary>
@@ -92,7 +58,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// <returns>true on success</returns>
         public override bool Activate()
         {
+            IsClosing = false;
             ExitCode = CompletionCode.None;
+            IsActive = true;
+
             var form = Context.AppPanelManager.CreatePanel("VolumeSettingsScanner");
             if (form != null)
             {
@@ -109,9 +78,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// to determine the 'enabled' state.
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            _volumeSettingsScanner.CheckWidgetEnabled(arg);
+            _volumeSettingsScanner.CheckCommandEnabled(arg);
         }
 
         /// <summary>
@@ -122,6 +91,12 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// <param name="handled">was this handled</param>
         public override void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
+            if (IsClosing)
+            {
+                Log.Debug("IsClosing is true.  Will not handle the focus change");
+                return;
+            }
+
             Log.Debug("OnFocus: " + monitorInfo);
 
             base.OnFocusChanged(monitorInfo, ref handled);
@@ -166,6 +141,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// <param name="e">event args</param>
         private void _volumeSettingsScanner_FormClosing(object sender, FormClosingEventArgs e)
         {
+            IsClosing = true;
+            IsActive = false;
+
             Close();
         }
 
@@ -186,6 +164,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.VolumeSettings
         /// </summary>
         private void quit()
         {
+            IsClosing = true;
+            IsActive = false;
+
             closeScanner();
             Close();
         }

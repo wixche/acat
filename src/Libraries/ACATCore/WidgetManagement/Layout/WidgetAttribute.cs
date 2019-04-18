@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WidgetAttribute.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.ACATResources;
+using ACAT.Lib.Core.Interpreter;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Windows.Forms;
 using System.Xml;
-using ACAT.Lib.Core.Interpreter;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.WidgetManagement
 {
@@ -91,10 +56,8 @@ namespace ACAT.Lib.Core.WidgetManagement
             Name = String.Empty;
             Label = String.Empty;
             Value = String.Empty;
-            Offset1 = -999;
-            Offset2 = -999;
             Modifiers = null;
-            MouseClickActuate = false;
+            MouseClickActuate = true;
             OnMouseClick = new PCode();
         }
 
@@ -124,7 +87,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         public bool IsVirtualKey { get; private set; }
 
         /// <summary>
-        /// What to display on the screen
+        /// What to display on the control in the form
         /// </summary>
         public String Label { get; set; }
 
@@ -145,18 +108,9 @@ namespace ACAT.Lib.Core.WidgetManagement
         public String Name { get; set; }
 
         /// <summary>
-        /// If this is a two letter text that's displayed,
-        /// offset of the 1st letter from the left margin of the bounding
-        /// rectangle
+        /// Value when the Shift key is pressed
         /// </summary>
-        public int Offset1 { get; set; }
-
-        /// <summary>
-        /// If this is a two letter text that's displayed,
-        /// offset of the 2nd letter from the left margin of the bounding
-        /// rectangle
-        /// </summary>
-        public int Offset2 { get; set; }
+        public String ShiftValue { get; set; }
 
         /// <summary>
         /// Tooltip help string
@@ -171,7 +125,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         /// <summary>
         /// Class factory to create a WidgetAttribute object from
         /// the xml node.  The xml fragment (e.g.) is as follows
-        ///   <WidgetAttribute name="B44" label="&lt;w" value="@unknown" fontname="Arial Narrow" fontsize="24"  offset2="16"/>
+        ///   <WidgetAttribute name="B44" label="&lt;w" value="@CmdMainMenu" fontname="Arial Narrow" fontsize="24"/>
         /// </summary>
         /// <param name="node">the xml node</param>
         /// <returns>button attribute object</returns>
@@ -224,15 +178,19 @@ namespace ACAT.Lib.Core.WidgetManagement
         {
             Name = XmlUtils.GetXMLAttrString(node, "name");
             Label = XmlUtils.GetXMLAttrString(node, "label");
+            if (Label.Length > 1)
+            {
+                Label = R.GetString(Label);
+            }
+
             Value = XmlUtils.GetXMLAttrString(node, "value");
             FontSize = XmlUtils.GetXMLAttrInt(node, "fontsize", FontSize);
-            Offset1 = XmlUtils.GetXMLAttrInt(node, "offset1", Offset1);
-            Offset2 = XmlUtils.GetXMLAttrInt(node, "offset2", Offset1);
             FontName = XmlUtils.GetXMLAttrString(node, "fontname", FontName);
             FontBold = XmlUtils.GetXMLAttrBool(node, "bold", FontBold);
             IsVirtualKey = XmlUtils.GetXMLAttrBool(node, "virtualkey", false);
             ToolTip = XmlUtils.GetXMLAttrString(node, "toolTip", String.Empty);
-            MouseClickActuate = XmlUtils.GetXMLAttrBool(node, "mouseClickActuate", false);
+            ShiftValue = XmlUtils.GetXMLAttrString(node, "shiftValue", String.Empty);
+            MouseClickActuate = XmlUtils.GetXMLAttrBool(node, "mouseClickActuate", true);
             String onMouseClick = XmlUtils.GetXMLAttrString(node, "onMouseClick");
             if (!String.IsNullOrEmpty(onMouseClick))
             {

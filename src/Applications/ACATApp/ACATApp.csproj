@@ -62,10 +62,13 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>Properties\Aster.ico</ApplicationIcon>
+    <ApplicationIcon>Properties\ACATApp.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <RunPostBuildEvent>Always</RunPostBuildEvent>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ACATCore">
@@ -74,10 +77,16 @@
     <Reference Include="ACATExtension">
       <HintPath>..\..\Redistributable\ACATExtension.dll</HintPath>
     </Reference>
+    <Reference Include="ACATResources, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Redistributable\ACATResources.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Data" />
@@ -94,6 +103,14 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>Reference.svcmap</DependentUpon>
     </Compile>
+    <Content Include="Install\Users\DefaultUser\en\Phrases.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Properties\ACATApp.ico" />
+    <Content Include="License.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Include="app.manifest" />
     <None Include="Service References\PresageService\Reference.svcmap">
       <Generator>WCF Proxy Generator</Generator>
       <LastGenOutput>Reference.cs</LastGenOutput>
@@ -113,39 +130,24 @@
     <None Include="app.config">
       <SubType>Designer</SubType>
     </None>
-    <Content Include="Install\Users\Default\Abbreviations.xml">
+    <Content Include="Install\Users\DefaultUser\en\Abbreviations.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\Actuators.xml">
+    <Content Include="Install\Users\DefaultUser\ActuatorSettings.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\LaunchAppSettings.xml">
+    <Content Include="Install\Users\DefaultUser\en\PanelClassConfig.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\PreferredPanelConfig.xml">
+    <Content Include="Install\Users\DefaultUser\LaunchAppSettings.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\Profiles\Talk\PreferredPanelConfig.xml">
+    <Content Include="Install\Users\DefaultUser\SAPIPronunciations.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\Profiles\Talk\Settings.xml">
+    <Content Include="Install\Users\DefaultUser\en\SpellCheck.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Install\Users\Default\SAPIPronunciations.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Install\Users\Default\SpellCheck.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Install\Users\Default\SwitchConfigMap.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="CreateUser.bat">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <None Include="Install\Users\Default\WordPredictors\Presage\database.db">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -189,14 +191,18 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Properties\Aster.ico" />
-  </ItemGroup>
-  <ItemGroup>
     <WCFMetadata Include="Service References\" />
   </ItemGroup>
   <ItemGroup>
     <WCFMetadataStorage Include="Service References\PresageService\" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AppCommon\AppCommon.csproj">
+      <Project>{9a6ff395-2444-439a-990d-1bab13bf56fd}</Project>
+      <Name>AppCommon</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>call "$(SolutionDir)deploy.bat" ..\..\..\.. $(Configuration)</PostBuildEvent>

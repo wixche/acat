@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WordPredictionManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,55 +18,25 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Linq;
 using System.Reflection;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.WordPredictionManagement
 {
     /// <summary>
-    /// Manages word prediction engines.  The engines are essentially DLLs
+    /// Manages word prediction engines.  The engines are  DLLs
     /// located in the WordPredictors folder in one of the extension directories.
     /// All engines derive from the IWordPredictor interface.  This class looks
     /// for these DLL's and maintains a list of available word predictors.  The
-    /// app can also set the active word predictor.
+    /// app sets the preferred word predcitor to use.
     /// This is a singleton instance class
     /// </summary>
     public class WordPredictionManager : IDisposable
@@ -80,11 +50,6 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         /// Word prediction manager instance
         /// </summary>
         private static readonly WordPredictionManager _instance = new WordPredictionManager();
-
-        /// <summary>
-        /// Null word predictor. Doesn't do anything :-)
-        /// </summary>
-        private readonly IWordPredictor _nullWordPredictor;
 
         /// <summary>
         /// Current User's current profile directory
@@ -117,11 +82,11 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         private WordPredictionManager()
         {
             AppDomain currentDomain = AppDomain.CurrentDomain;
+
+            Context.EvtCultureChanged += Context_EvtCultureChanged;
             currentDomain.AssemblyResolve += currentDomain_AssemblyResolve;
 
-            _nullWordPredictor = new NullWordPredictor();
-            _nullWordPredictor.Init();
-            _activeWordPredictor = _nullWordPredictor;
+            _activeWordPredictor = WordPredictors.NullWordPredictor;
 
             _userWordPredictorRootDir = UserManagement.UserManager.GetFullPath(WordPredictorsRootName);
             _profileRootDir = UserManagement.ProfileManager.GetFullPath(WordPredictorsRootName);
@@ -144,6 +109,14 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
+        /// Gets the collection of discovered word predictors
+        /// </summary>
+        public ICollection<Type> WordPredictorExtensions
+        {
+            get { return _wordPredictors.Collection; }
+        }
+
+        /// <summary>
         /// Gets the word predictor root directory relative the user's
         /// current profile
         /// </summary>
@@ -162,14 +135,6 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
-        /// Gets the collection of discovered word predictors
-        /// </summary>
-        public ICollection<Type> WordPredictors
-        {
-            get { return _wordPredictors.Collection; }
-        }
-
-        /// <summary>
         /// Disposes resources
         /// </summary>
         public void Dispose()
@@ -182,40 +147,13 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
-        /// Initialize the Word Predictor manager by looking for
-        /// Word predictor dlls.
-        /// The extension dirs parameter contains the root directory under
-        /// which to search for Word Predictor DLL files.  The directories
-        /// are specified in a comma delimited fashion.
-        /// E.g.  Base, Hawking
-        /// These are relative to the application execution directory or
-        /// to the directory where the ACAT framework has been installed.
-        /// It recusrively walks the directories and looks for Word Predictor
-        /// extension DLL files
+        /// Initialize the Word Predictor manager
         /// </summary>
         /// <param name="extensionDirs"></param>
         /// <returns></returns>
         public bool Init(IEnumerable<String> extensionDirs)
         {
-            bool retVal = true;
-
-            if (_wordPredictors == null)
-            {
-                _wordPredictors = new WordPredictors();
-
-                // add the null word predictor to our list of
-                // recognizied word predictors
-                IDescriptor descriptor = _nullWordPredictor.Descriptor;
-                if (descriptor != null)
-                {
-                    _wordPredictors.Add(descriptor.Id, typeof(NullWordPredictor));
-                }
-
-                // walk through the directory to discover
-                retVal = _wordPredictors.Load(extensionDirs);
-            }
-
-            return retVal;
+            return true;
         }
 
         /// <summary>
@@ -228,6 +166,33 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
+        /// Loads all the word prediction extensions.
+        /// The extension dirs parameter contains the root directory under
+        /// which to search for Word Predictor DLL files.  The directories
+        /// are specified in a comma delimited fashion.
+        /// E.g.  Base, Hawking
+        /// These are relative to the application execution directory or
+        /// to the directory where the ACAT framework has been installed.
+        /// It recusrively walks the directories and looks for Word Predictor
+        /// extension DLL files
+        /// </summary>
+        /// <param name="extensionDirs">root directory</param>
+        /// <returns>true on success</returns>
+        public bool LoadExtensions(IEnumerable<String> extensionDirs)
+        {
+            bool retVal = true;
+
+            if (_wordPredictors == null)
+            {
+                _wordPredictors = new WordPredictors();
+
+                retVal = _wordPredictors.Load(extensionDirs);
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
         /// Indicates to the active word predictor that it needs to save
         /// its settings
         /// </summary>
@@ -237,42 +202,167 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
-        /// Sets the active word predictor represented by id
-        /// as a Guid or name.
+        /// Sets the active word predictor for the specified culture. If
+        /// culture is null, the default culture is used
         /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public bool SetActiveWordPredictor(String idOrName)
+        /// <param name="ci">culture info</param>
+        /// <returns>true on success</returns>
+        public bool SetActiveWordPredictor(CultureInfo ci = null)
         {
             bool retVal = true;
             Guid guid = Guid.Empty;
+            Guid cultureNeutralGuid = Guid.Empty;
 
-            if (!Guid.TryParse(idOrName, out guid))
+            if (ci == null)
             {
-                guid = _wordPredictors.GetByName(idOrName);
+                ci = CultureInfo.DefaultThreadCurrentUICulture;
             }
 
-            Type type = Guid.Equals(idOrName, Guid.Empty) ?
-                            type = typeof(NullWordPredictor) :
-                            _wordPredictors.Lookup(guid);
+            guid = _wordPredictors.GetPreferredOrDefaultByCulture(ci);
+            cultureNeutralGuid = _wordPredictors.GetPreferredOrDefaultByCulture(null);
 
-            if (type != null)
+            if (!Equals(guid, Guid.Empty))  // found something for the specific culture
             {
+                var type = _wordPredictors.Lookup(guid);
+
                 if (_activeWordPredictor != null)
                 {
                     _activeWordPredictor.Dispose();
                     _activeWordPredictor = null;
                 }
 
-                retVal = createAndSetActiveWordPredictor(type);
+                retVal = createAndSetActiveWordPredictor(type, ci);
+
+                if (!retVal)
+                {
+                    _activeWordPredictor = WordPredictors.NullWordPredictor;
+                }
             }
             else
             {
-                createAndSetActiveWordPredictor(typeof(NullWordPredictor));
-                retVal = false;
+                if (!Equals(cultureNeutralGuid, Guid.Empty))
+                {
+                    var type = _wordPredictors.Lookup(cultureNeutralGuid);
+                    retVal = createAndSetActiveWordPredictor(type, ci);
+
+                    if (!retVal)
+                    {
+                        ci = new CultureInfo("en-US");
+                        guid = _wordPredictors.GetDefaultByCulture(ci);
+                        if (!Equals(guid, Guid.Empty))
+                        {
+                            type = _wordPredictors.Lookup(guid);
+                            retVal = createAndSetActiveWordPredictor(type, ci);
+                        }
+                    }
+                }
+                else
+                {
+                    retVal = false;
+                }
+
+                if (!retVal)
+                {
+                    _activeWordPredictor = WordPredictors.NullWordPredictor;
+                }
             }
 
             return retVal;
+        }
+
+        /// <summary>
+        /// Displays the preferences dialog for word prediction.
+        /// First displays the dialog that lets the user select the
+        /// culture (language) and then displays all the word predictors
+        /// discovered for that culture. The user can select the
+        /// preferred word predictor, change settings etc.
+        /// </summary>
+        public void ShowPreferences()
+        {
+            if (!ResourceUtils.IsInstalledCulture(CultureInfo.DefaultThreadCurrentUICulture))
+            {
+                return;
+            }
+
+            var ci = CultureInfo.DefaultThreadCurrentUICulture;
+
+            List<Type> wpTypeList = new List<Type>();
+
+            // add all the word predictors for the selected language
+            wpTypeList.AddRange(_wordPredictors.Get(ci.Name).ToList());
+
+            if (String.Compare(ci.Name, ci.TwoLetterISOLanguageName, true) != 0)
+            {
+                wpTypeList.AddRange(_wordPredictors.Get(ci.TwoLetterISOLanguageName).ToList());
+            }
+
+            wpTypeList.AddRange(_wordPredictors.Get(null).ToList());
+            wpTypeList.Add(typeof(NullWordPredictor));
+
+            //Now create a list of all the word predictor objects
+            List<object> objList = wpTypeList.Select(type => Activator.CreateInstance(type)).ToList();
+
+            var categories = objList.Select(wordPredictor => new PreferencesCategory(wordPredictor)).ToList();
+
+            var preferredGuid = _wordPredictors.GetPreferredOrDefaultByCulture(ci);
+            if (Equals(preferredGuid, Guid.Empty))
+            {
+                preferredGuid = _wordPredictors.GetPreferredOrDefaultByCulture(null);
+            }
+
+            foreach (var category in categories)
+            {
+                category.Enable = false;
+            }
+
+            foreach (var category in categories)
+            {
+                var iExtension = category.PreferenceObj as IExtension;
+                category.Enable = (iExtension != null && iExtension.Descriptor.Id == preferredGuid);
+                if (category.Enable)
+                {
+                    break;
+                }
+            }
+
+            // display the form for the user to select default word predictor,
+            // change settings etc
+            var form1 = new PreferencesCategorySelectForm
+            {
+                PreferencesCategories = categories,
+                Title = "Word Predictors - " + ci.DisplayName,
+                EnableColumnHeaderText = "Default",
+                CategoryColumnHeaderText = "Word Predictor",
+                AllowMultiEnable = false
+            };
+
+            if (form1.ShowDialog() == DialogResult.OK)
+            {
+                foreach (var category in form1.PreferencesCategories)
+                {
+                    if (category.Enable && category.PreferenceObj is IExtension)
+                    {
+                        _wordPredictors.SetPreferred(ci.Name, ((IExtension)category.PreferenceObj).Descriptor.Id);
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Switch language to the specified one.
+        /// </summary>
+        /// <param name="ci">culture to switch to</param>
+        /// <returns>true on success</returns>
+        public bool SwitchLanguage(CultureInfo ci)
+        {
+            if (_activeWordPredictor != null)
+            {
+                _activeWordPredictor.Dispose();
+                _activeWordPredictor = null;
+            }
+
+            return SetActiveWordPredictor(ci);
         }
 
         /// <summary>
@@ -286,6 +376,8 @@ namespace ACAT.Lib.Core.WordPredictionManagement
             {
                 Log.Debug();
 
+                Context.EvtCultureChanged -= Context_EvtCultureChanged;
+
                 if (disposing)
                 {
                     // dispose all managed resources.
@@ -298,11 +390,6 @@ namespace ACAT.Lib.Core.WordPredictionManagement
                     {
                         _wordPredictors.Dispose();
                     }
-
-                    if (_nullWordPredictor != null)
-                    {
-                        _nullWordPredictor.Dispose();
-                    }
                 }
 
                 // Release unmanaged resources.
@@ -312,35 +399,40 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         }
 
         /// <summary>
+        /// Event handler for when the culture changes
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="arg">event arg</param>
+        private void Context_EvtCultureChanged(object sender, CultureChangedEventArg arg)
+        {
+            SwitchLanguage(arg.Culture);
+        }
+
+        /// <summary>
         /// Creates the word predictor using reflection on the
         /// specified type and makes it the active one.  If it fails,
         /// it set the null word predictor as the active one.
         /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        private bool createAndSetActiveWordPredictor(Type type)
+        /// <param name="type">Type of the word predictor class</param>
+        /// <param name="ci">Culture</param>
+        /// <returns>true</returns>
+        private bool createAndSetActiveWordPredictor(Type type, CultureInfo ci)
         {
-            bool retVal = true;
+            bool retVal;
 
             try
             {
                 var wordPredictor = (IWordPredictor)Activator.CreateInstance(type);
-                retVal = wordPredictor.Init();
+                retVal = wordPredictor.Init(ci);
                 if (retVal)
                 {
-                    saveSettings(wordPredictor);
                     _activeWordPredictor = wordPredictor;
                 }
             }
             catch (Exception ex)
             {
-                Log.Debug("Unable to load WordPredictor " + type + ", assembly: " + type.Assembly.FullName + ". Exception: " + ex.ToString());
+                Log.Debug("Unable to load WordPredictor " + type + ", assembly: " + type.Assembly.FullName + ". Exception: " + ex);
                 retVal = false;
-            }
-
-            if (!retVal)
-            {
-                _activeWordPredictor = _nullWordPredictor;
             }
 
             return retVal;

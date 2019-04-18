@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="DialogUtils.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,13 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension
 {
@@ -72,7 +36,7 @@ namespace ACAT.Lib.Extension
     public class DialogUtils
     {
         /// <summary>
-        /// Displays a yes no confirmation
+        /// Displays a yes no confirmation dialog box.
         /// </summary>
         /// <param name="caption">Prompt string</param>
         /// <param name="title">title of the dialog</param>
@@ -83,7 +47,7 @@ namespace ACAT.Lib.Extension
         }
 
         /// <summary>
-        /// Displays a yes no confirmation
+        /// Displays a yes no confirmation dialog box
         /// </summary>
         /// <param name="caption">Prompt string</param>
         /// <returns>true if yes</returns>
@@ -93,7 +57,7 @@ namespace ACAT.Lib.Extension
         }
 
         /// <summary>
-        /// Displays a yes no confirmation
+        /// Displays a yes no confirmation dialog box
         /// </summary>
         /// <param name="parent">parent scanner</param>
         /// <param name="caption">prompt string</param>
@@ -136,11 +100,6 @@ namespace ACAT.Lib.Extension
         /// <returns>true if yes</returns>
         public static bool ConfirmScanner(IPanel parent, String caption)
         {
-            //var yesNoScannerHelper = new YesNoScannerHelper("YesNoScanner", caption);
-
-            //yesNoScannerHelper.ShowDialog(parent);
-            //return yesNoScannerHelper.YesNo;
-
             return showYesNoScanner(parent, "YesNoScanner", caption);
         }
 
@@ -172,7 +131,7 @@ namespace ACAT.Lib.Extension
         /// </summary>
         public static async void LaunchVolumeSettingsAgent()
         {
-            var volumeSettingsAgent = Context.AppAgentMgr.GetAgentByName("Volume Settings Agent");
+            var volumeSettingsAgent = Context.AppAgentMgr.GetAgentByCategory("VolumeSettingsAgent");
             if (volumeSettingsAgent == null)
             {
                 return;
@@ -188,10 +147,11 @@ namespace ACAT.Lib.Extension
         /// <param name="logo">filename of the logo to display</param>
         /// <param name="appName">Name of the assembly</param>
         /// <param name="versionInfo">version information</param>
+        /// <param name="companyInfo">company information</param>
         /// <param name="copyrightInfo">copyright info</param>
         /// <param name="attributions">3rd party attributions</param>
         public static void ShowAboutBox(Form parentForm, String logo, String appName,
-                                        String versionInfo, String copyrightInfo,
+                                        String versionInfo, String companyInfo, String copyrightInfo,
                                         IEnumerable<String> attributions)
         {
             parentForm.Invoke(new MethodInvoker(delegate
@@ -203,6 +163,7 @@ namespace ACAT.Lib.Extension
                     invoker.SetValue("Logo", logo);
                     invoker.SetValue("AppName", appName);
                     invoker.SetValue("VersionInfo", versionInfo);
+                    invoker.SetValue("CompanyInfo", companyInfo);
                     invoker.SetValue("CopyrightInfo", copyrightInfo);
                     invoker.SetValue("Attributions", attributions);
                     invoker.SetValue("ShowButton", true);
@@ -219,14 +180,47 @@ namespace ACAT.Lib.Extension
         {
             try
             {
-                Context.AppTalkWindowManager.CloseTalkWindow();
-                IApplicationAgent launchAppAgent = Context.AppAgentMgr.GetAgentByName("Launch App Agent");
+                if (!Context.AppAgentMgr.CanActivateFunctionalAgent())
+                {
+                    return;
+                }
+
+                IApplicationAgent launchAppAgent = Context.AppAgentMgr.GetAgentByCategory("LaunchAppAgent");
                 if (launchAppAgent == null)
                 {
                     return;
                 }
 
                 await Context.AppAgentMgr.ActivateAgent(launchAppAgent as IFunctionalAgent);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Activates the File Browser functional agent.
+        /// </summary>
+        public static async void ShowFileBrowser(String action)
+        {
+            try
+            {
+                if (!Context.AppAgentMgr.CanActivateFunctionalAgent())
+                {
+                    return;
+                }
+
+                IApplicationAgent fileBrowserAgent = Context.AppAgentMgr.GetAgentByCategory("FileBrowserAgent");
+                if (fileBrowserAgent == null)
+                {
+                    return;
+                }
+
+                fileBrowserAgent.GetInvoker().SetValue("AutoLaunchFile", true);
+                fileBrowserAgent.GetInvoker().SetValue("Action", action);
+
+                await Context.AppAgentMgr.ActivateAgent(fileBrowserAgent as IFunctionalAgent);
             }
             catch (Exception ex)
             {
@@ -245,8 +239,12 @@ namespace ACAT.Lib.Extension
         {
             try
             {
-                Context.AppTalkWindowManager.CloseTalkWindow();
-                IApplicationAgent switchWindowsAgent = Context.AppAgentMgr.GetAgentByName("Switch Windows Agent");
+                if (!Context.AppAgentMgr.CanActivateFunctionalAgent())
+                {
+                    return;
+                }
+
+                IApplicationAgent switchWindowsAgent = Context.AppAgentMgr.GetAgentByCategory("SwitchWindowsAgent");
                 if (switchWindowsAgent == null)
                 {
                     return;
@@ -274,7 +272,7 @@ namespace ACAT.Lib.Extension
         {
             try
             {
-                Context.AppTalkWindowManager.CloseTalkWindow();
+                //Context.AppTalkWindowManager.CloseTalkWindow();
                 Form taskSwitcherForm = Context.AppPanelManager.CreatePanel("TaskSwitcherForm");
                 if (taskSwitcherForm != null)
                 {
@@ -289,7 +287,7 @@ namespace ACAT.Lib.Extension
             }
             catch (Exception e)
             {
-                Log.Debug("Error creating task switcher dialog. Exception: " + e.ToString());
+                Log.Debug("Error creating task switcher dialog. Exception: " + e);
             }
         }
 
@@ -311,18 +309,17 @@ namespace ACAT.Lib.Extension
         /// <param name="message">message to display</param>
         public static void ShowTimedDialog(Form parentForm, String title, String message)
         {
-            parentForm.Invoke(new MethodInvoker(delegate()
+            if (parentForm != null)
             {
-                Form dlg = Context.AppPanelManager.CreatePanel("TimedDialogForm");
-                if (dlg is IExtension)
+                parentForm.Invoke(new MethodInvoker(delegate
                 {
-                    ExtensionInvoker invoker = (dlg as IExtension).GetInvoker();
-                    invoker.SetValue("MessageText", message);
-                    invoker.SetValue("TitleText", title);
-                    invoker.SetValue("ShowButton", true);
-                    Context.AppPanelManager.ShowDialog(dlg as IPanel);
-                }
-            }));
+                    showTimedDialog(title, message);
+                }));
+            }
+            else
+            {
+                showTimedDialog(title, message);
+            }
         }
 
         /// <summary>
@@ -359,7 +356,7 @@ namespace ACAT.Lib.Extension
             if (form is IExtension)
             {
                 var invoker = (form as IExtension).GetInvoker();
-                invoker.SetValue("TitleBar", String.IsNullOrEmpty(title) ? "ACAT" : title);
+                invoker.SetValue("TitleBar", String.IsNullOrEmpty(title) ? Common.AppPreferences.AppName : title);
                 invoker.SetValue("Caption", caption);
             }
 
@@ -392,6 +389,24 @@ namespace ACAT.Lib.Extension
         }
 
         /// <summary>
+        /// Shows the TimedDialog window
+        /// </summary>
+        /// <param name="title">title of the dialog</param>
+        /// <param name="message">message to display</param>
+        private static void showTimedDialog(String title, String message)
+        {
+            Form dlg = Context.AppPanelManager.CreatePanel("TimedDialogForm");
+            if (dlg is IExtension)
+            {
+                ExtensionInvoker invoker = (dlg as IExtension).GetInvoker();
+                invoker.SetValue("MessageText", message);
+                invoker.SetValue("TitleText", title);
+                invoker.SetValue("ShowButton", true);
+                Context.AppPanelManager.ShowDialog(dlg as IPanel);
+            }
+        }
+
+        /// <summary>
         /// Creates the yes/no scanner form and shows it as a dialog.
         /// Returns the result of the user choice
         /// </summary>
@@ -403,7 +418,7 @@ namespace ACAT.Lib.Extension
         {
             bool retVal = false;
 
-            Form form = initYesNoScanner(panelClass, "ACAT", caption);
+            Form form = initYesNoScanner(panelClass, Common.AppPreferences.AppName, caption);
             if (form != null)
             {
                 Context.AppPanelManager.ShowDialog(parent, form as IPanel);

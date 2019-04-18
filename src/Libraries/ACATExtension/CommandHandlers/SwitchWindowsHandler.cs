@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="SwitchWindowsHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,57 +18,21 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
     /// <summary>
     /// Activates the agent that lets the user switch
     /// between windows of the active process. For instance
-    /// if there are multiple notepad windows, or multiple
-    /// word documents open.
+    /// if there are multiple notepad windows, only displays all
+    /// the active notepad windows
     /// </summary>
     public class SwitchWindowsHandler : RunCommandHandler
     {
@@ -92,19 +56,22 @@ namespace ACAT.Lib.Extension.CommandHandlers
 
             handled = true;
 
+            if (!Context.AppAgentMgr.CanActivateFunctionalAgent())
+            {
+                return false;
+            }
+
             Form form = Dispatcher.Scanner.Form;
 
-            form.Invoke(new MethodInvoker(delegate()
+            form.Invoke(new MethodInvoker(delegate
             {
-                IApplicationAgent switchWindowsAgent = Context.AppAgentMgr.GetAgentByName("Switch Windows Agent");
+                IApplicationAgent switchWindowsAgent = Context.AppAgentMgr.GetAgentByCategory("SwitchWindowsAgent");
                 if (switchWindowsAgent == null)
                 {
                     retVal = false;
                 }
                 else
                 {
-                    Context.AppTalkWindowManager.CloseTalkWindow();
-
                     IntPtr foregroundWindow = Windows.GetForegroundWindow();
                     var process = WindowActivityMonitor.GetProcessForWindow(foregroundWindow);
                     IExtension extension = switchWindowsAgent;

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="FileBrowserScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,13 +18,7 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Extensions;
@@ -35,39 +29,18 @@ using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Core.Widgets;
 using ACAT.Lib.Extension;
+using ACAT.Lib.Extension.CommandHandlers;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Security.Permissions;
+using System.Windows.Forms;
+using Font = System.Drawing.Font;
+using Windows = ACAT.Lib.Core.Utility.Windows;
 
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
+namespace ACAT.Extensions.Default.FunctionalAgents.FileBrowserAgent
 {
     /// <summary>
     /// Presents a list of files as a list.  User can browse
@@ -78,15 +51,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
     /// specific type or exclude files of a specific type.  The
     /// list can be sorted either alphabetically or by date.
     /// </summary>
-    [DescriptorAttribute("D5DABE09-4B8C-4D1C-A778-9E0A7F8B7D69", "FileBrowserScanner", "File Browser Scanner")]
+    [DescriptorAttribute("D5DABE09-4B8C-4D1C-A778-9E0A7F8B7D69",
+                            "FileBrowserScanner",
+                            "File Browser Scanner")]
     public partial class FileBrowserScanner : Form, IScannerPanel, IExtension
     {
-        /// <summary>
-        /// Max chars of file name.  if length exceeds, ellipses
-        /// are displayed
-        /// </summary>
-        private const int MaxFileNameChars = 30;
-
         /// <summary>
         /// Dispatches commands
         /// </summary>
@@ -97,17 +66,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// </summary>
         private readonly ExtensionInvoker _invoker;
 
+        /// <summary>
+        /// The keyboard actuator
+        /// </summary>
         private readonly KeyboardActuator _keyboardActuator;
+
+        /// <summary>
+        /// The scanner common object
+        /// </summary>
+        private readonly ScannerCommon _scannerCommon;
 
         /// <summary>
         /// List of all files
         /// </summary>
         private List<FileInfo> _allFilesList;
-
-        /// <summary>
-        /// Scanner form with which this form is docked
-        /// </summary>
-        private Form _dockedWithForm;
 
         /// <summary>
         /// How may files to display per page
@@ -155,14 +127,14 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         private int _pageStartIndex;
 
         /// <summary>
-        /// The scanner common object
+        /// Widget that the user clicks to resort
         /// </summary>
-        private ScannerCommon _scannerCommon;
+        private Widget _sortButton;
 
         /// <summary>
         /// The current sort order
         /// </summary>
-        private SortOrder _sortOrder = SortOrder.Date;
+        private SortOrder _sortOrder = SortOrder.DateDescending;
 
         /// <summary>
         /// Widget that displays the current sort order
@@ -184,8 +156,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// </summary>
         public FileBrowserScanner()
         {
+            _scannerCommon = new ScannerCommon(this);
+
             InitializeComponent();
-            ActionVerb = "Open";
+            ActionVerb = R.GetString("Open");
             PanelClass = "FileBrowserScanner";
 
             _allFilesList = new List<FileInfo>();
@@ -204,10 +178,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
 
             KeyPreview = true;
 
-            FormClosing += FileBrowserScanner_FormClosing;
-            Shown += FileBrowserScanner_Shown;
-            KeyDown += FileBrowserScanner_KeyDown;
-            LocationChanged += FileBrowserScanner_LocationChanged;
+            subscribeToEvents();
 
             var actuator = ActuatorManager.Instance.GetActuator(typeof(KeyboardActuator));
             if (actuator is KeyboardActuator)
@@ -216,7 +187,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
                 _keyboardActuator.EvtKeyPress += _keyboardActuator_EvtKeyPress;
             }
 
-            _dispatcher = new RunCommandDispatcher(this);
+            _dispatcher = new Dispatcher(this);
+
+            statusStrip.SizingGrip = false;
         }
 
         /// <summary>
@@ -236,13 +209,19 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         public event EventHandler EvtFileOpen;
 
         /// <summary>
+        /// Event raised to display the alphabet scanner
+        /// </summary>
+        public event EventHandler EvtShowScanner;
+
+        /// <summary>
         /// What kinda operation?
         /// </summary>
-        private enum FileOperation
+        internal enum FileOperation
         {
             None,
             Open,
-            Delete
+            Delete,
+            UserChoice
         }
 
         /// <summary>
@@ -250,8 +229,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// </summary>
         private enum SortOrder
         {
-            Name,
-            Date
+            AtoZ,
+            ZtoA,
+            DateAscending,
+            DateDescending
         }
 
         /// <summary>
@@ -267,6 +248,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         {
             get { return _dispatcher; }
         }
+
+        /// <summary>
+        /// Gets/sets the date format for file display
+        /// </summary>
+        public String DateFormat { get; set; }
 
         /// <summary>
         /// Gets the descriptor for this class
@@ -324,18 +310,17 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         public String PanelClass { get; private set; }
 
         /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _scannerCommon; } }
+
+        /// <summary>
         /// Gets the scannercommon object
         /// </summary>
         public ScannerCommon ScannerCommon
         {
             get { return _scannerCommon; }
         }
-
-        /// <summary>
-        /// Gets or sets whether the file should be opened when
-        /// the user selects it.  If false, presents options
-        /// </summary>
-        public bool SelectActionOpen { get; set; }
 
         /// <summary>
         /// Gets the name of the file selected
@@ -359,6 +344,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
+        /// Gets or sets what kinda action on the file when the user selects it
+        /// </summary>
+        internal FileOperation Action { get; set; }
+
+        /// <summary>
         /// Set form styles
         /// </summary>
         protected override CreateParams CreateParams
@@ -375,8 +365,44 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// to determine the 'enabled' state.
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
-        public bool CheckWidgetEnabled(CheckEnabledArgs arg)
+        public bool CheckCommandEnabled(CommandEnabledArg arg)
         {
+            arg.Handled = true;
+
+            switch (arg.Command)
+            {
+                case "CmdPrevPage":
+                    arg.Enabled = (_pageNumber != 0);
+                    break;
+
+                case "CmdNextPage":
+                    arg.Enabled = (_numPages != 0 && (_pageNumber + 1) != _numPages);
+                    break;
+
+                case "Back":
+                case "CmdDeletePrevWord":
+                case "FileListClearFilter":
+                    arg.Handled = true;
+                    arg.Enabled = !IsFilterEmpty();
+                    break;
+
+                case "FileListSort":
+                case "FileListSearch":
+                    arg.Handled = true;
+                    arg.Enabled = (_fileList != null && _fileList.Any());
+                    break;
+
+                case "CmdPrevChar":
+                case "CmdNextChar":
+                    arg.Handled = true;
+                    arg.Enabled = true;
+                    break;
+
+                default:
+                    arg.Handled = false;
+                    break;
+            }
+
             return false;
         }
 
@@ -387,7 +413,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         {
             Invoke(new MethodInvoker(delegate
             {
-                if (SearchFilter.Text.Length > 0 && DialogUtils.ConfirmScanner("Clear filter?"))
+                if (SearchFilter.Text.Length > 0 && DialogUtils.ConfirmScanner(R.GetString("ClearFilter")))
                 {
                     SearchFilter.Text = String.Empty;
                 }
@@ -410,7 +436,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// <returns>true on success</returns>
         public bool Initialize(StartupArg startupArg)
         {
-            _scannerCommon = new ScannerCommon(this) { PositionSizeController = { AutoPosition = false } };
+            _scannerCommon.PositionSizeController.AutoPosition = true;
 
             if (!_scannerCommon.Initialize(startupArg))
             {
@@ -418,7 +444,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
                 return false;
             }
 
-            PanelManager.Instance.EvtScannerShow += Instance_EvtScannerShow;
+            Windows.EvtWindowPositionChanged += Windows_EvtWindowPositionChanged;
+
             return true;
         }
 
@@ -429,9 +456,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         public bool IsFilterEmpty()
         {
             bool retVal = true;
+
             if (_handleCreated)
             {
-                Invoke(new MethodInvoker(delegate()
+                Invoke(new MethodInvoker(delegate
                 {
                     retVal = (SearchFilter.Text.Length == 0);
                 }));
@@ -441,8 +469,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
-        /// Invoked when the focus changes either in the active window or when the
-        /// active window itself changes.
+        /// Not used
         /// </summary>
         /// <param name="monitorInfo">Info about focused element</param>
         public void OnFocusChanged(WindowActivityMonitorInfo monitorInfo)
@@ -450,10 +477,11 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
-        /// Not used
+        /// Pauses scanning
         /// </summary>
         public void OnPause()
         {
+            PanelCommon.AnimationManager.Pause();
         }
 
         /// <summary>
@@ -467,34 +495,27 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
-        /// Not used
+        /// Resumes scanning
         /// </summary>
         public void OnResume()
         {
+            _scannerCommon.PositionSizeController.AutoSetPosition();
+
+            PanelCommon.AnimationManager.Resume();
         }
 
         /// <summary>
-        /// Invoked when there is a request to run a command. This
-        /// could as a result of the user activating a button on the
-        /// scanner and there is a command associated with the button
+        /// Not used
         /// </summary>
-        /// <param name="command">command to run</param>
-        /// <param name="handled">was this handled?</param>
+        /// <param name="command"></param>
+        /// <param name="handled"></param>
         public void OnRunCommand(string command, ref bool handled)
         {
-            if (command.StartsWith("highlight", StringComparison.InvariantCultureIgnoreCase))
+            switch (command)
             {
-                handleHighlight(command);
-            }
-
-            if (command.StartsWith("select", StringComparison.InvariantCultureIgnoreCase))
-            {
-                handleSelect(command);
-            }
-            else
-            {
-                Log.Debug("Unlandled command " + command);
-                handled = false;
+                case "CmdGoBack":
+                    close();
+                    break;
             }
         }
 
@@ -505,10 +526,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// <param name="handled">was it handled?</param>
         public void OnWidgetActuated(Widget widget, ref bool handled)
         {
-            if (widget is TabStopScannerButton)
-            {
-                handled = true;
-            }
+            actuateWidget(widget, ref handled);
         }
 
         /// <summary>
@@ -552,36 +570,53 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
+        /// Size of the client changed
+        /// </summary>
+        /// <param name="e">event args</param>
+        protected override void OnClientSizeChanged(EventArgs e)
+        {
+            base.OnClientSizeChanged(e);
+            _scannerCommon.OnClientSizeChanged();
+        }
+
+        /// <summary>
         /// Clean up
         /// </summary>
         /// <param name="e">event args</param>
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _scannerCommon.OnFormClosing(e);
+
+            Windows.EvtWindowPositionChanged -= Windows_EvtWindowPositionChanged;
             SearchFilter.TextChanged -= SearchFilter_TextChanged;
             SortOrderIcon.Click -= SortOrderIcon_Click;
 
             removeWatchdogs();
-
-            PanelManager.Instance.EvtScannerShow -= Instance_EvtScannerShow;
 
             _keyboardActuator.EvtKeyPress -= _keyboardActuator_EvtKeyPress;
             base.OnFormClosing(e);
         }
 
         /// <summary>
-        /// window proc
+        /// Window proc
         /// </summary>
         /// <param name="m">windows message</param>
         [EnvironmentPermissionAttribute(SecurityAction.LinkDemand, Unrestricted = true)]
         protected override void WndProc(ref Message m)
         {
-            _scannerCommon.HandleWndProc(m);
+            if (_scannerCommon != null)
+            {
+                if (_scannerCommon.HandleWndProc(m))
+                {
+                    return;
+                }
+            }
+
             base.WndProc(ref m);
         }
 
         /// <summary>
-        /// Key press handler
+        /// Key press handler.  Process the ESC key to quit
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event args</param>
@@ -592,27 +627,37 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
                 int c = e.KeyChar;
                 if (c == 27)
                 {
-                    EvtDone.BeginInvoke(false, null, null);
+                    close();
                 }
             }
         }
 
         /// <summary>
-        /// Actuate a widget
+        /// Actuates a widget - performs associated action
         /// </summary>
-        /// <param name="widgetName">name of the widget</param>
-        private void actuateWidget(String widgetName)
+        /// <param name="widget">widget to actuate</param>
+        /// <param name="handled">true if handled</param>
+        private void actuateWidget(Widget widget, ref bool handled)
         {
-            var widget = _scannerCommon.GetRootWidget().Finder.FindChild(widgetName);
-            if (widget != null)
-            {
-                object obj = widget.UserData;
-                if (obj is ItemTag)
-                {
-                    handleSelect(obj as ItemTag);
-                }
+            handleWidgetSelection(widget, ref handled);
+            highlightOff();
+        }
 
-                highlightOff();
+        /// <summary>
+        /// Confirm and close the scanner
+        /// </summary>
+        private void close()
+        {
+            if (EvtDone != null)
+            {
+                EvtDone.BeginInvoke(false, null, null);
+            }
+            else
+            {
+                if (DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentForm(), R.GetString("CloseQ")))
+                {
+                    Windows.CloseForm(this);
+                }
             }
         }
 
@@ -622,9 +667,23 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// <param name="scanner">companian scanner</param>
         private void dockToScanner(Form scanner)
         {
+            if (!Windows.GetVisible(this))
+            {
+                return;
+            }
+
             if (scanner is IScannerPanel)
             {
-                Windows.DockWithScanner(this, scanner, Context.AppWindowPosition);
+                if (((IPanel)scanner).PanelCommon.DisplayMode != DisplayModeTypes.Popup)
+                {
+                    Windows.DockWithScanner(this, scanner, Context.AppWindowPosition);
+                    Windows.SetTopMost(scanner);
+                }
+            }
+
+            if (Left < 0)
+            {
+                Left = 0;
             }
         }
 
@@ -666,33 +725,31 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
-        /// The form has loaded.  Initialze
+        /// The form has loaded.  Initialze it.
         /// </summary>
         private void FileBrowserScanner_Load(object sender, EventArgs e)
         {
+            Text = R.GetString("FileBrowser");
+
             enableWatchdogs();
 
             _scannerCommon.OnLoad();
 
             var list = new List<Widget>();
-            _scannerCommon.GetRootWidget().Finder.FindChild(typeof(TabStopScannerButton), list);
-
-            foreach (var widget in list)
-            {
-                widget.EvtMouseClicked += widget_EvtMouseClicked;
-            }
+            PanelCommon.RootWidget.Finder.FindChild(typeof(TabStopScannerButton), list);
 
             _tabStopButtonCount = list.Count;
 
-            _sortOrderWidget = _scannerCommon.GetRootWidget().Finder.FindChild("SortOrderIcon");
-            _pageNumberWidget = _scannerCommon.GetRootWidget().Finder.FindChild("PageNumber");
+            _sortOrderWidget = PanelCommon.RootWidget.Finder.FindChild("SortOrderIcon");
+            _pageNumberWidget = PanelCommon.RootWidget.Finder.FindChild("PageNumber");
+            _sortButton = PanelCommon.RootWidget.Finder.FindChild("ButtonSort");
 
             SearchFilter.TextChanged += SearchFilter_TextChanged;
             SortOrderIcon.Click += SortOrderIcon_Click;
 
             loadFiles();
 
-            _scannerCommon.GetRootWidget().HighlightOff();
+            PanelCommon.RootWidget.HighlightOff();
 
             var panel = PanelManager.Instance.GetCurrentPanel();
             if (panel != null)
@@ -701,19 +758,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
             }
 
             _handleCreated = true;
-        }
 
-        /// <summary>
-        /// Keep the scanner docked
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void FileBrowserScanner_LocationChanged(object sender, EventArgs e)
-        {
-            if (_dockedWithForm != null)
-            {
-                dockToScanner(_dockedWithForm);
-            }
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
@@ -777,12 +823,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
 
             switch (order)
             {
-                case SortOrder.Date:
+                case SortOrder.DateDescending:
                     retVal = retVal.OrderByDescending(f => f.LastWriteTime).ToList();
                     break;
 
-                case SortOrder.Name:
+                case SortOrder.DateAscending:
+                    retVal = retVal.OrderBy(f => f.LastWriteTime).ToList();
+                    break;
+
+                case SortOrder.AtoZ:
                     retVal = retVal.OrderBy(f => f.Name).ToList();
+                    break;
+
+                case SortOrder.ZtoA:
+                    retVal = retVal.OrderByDescending(f => f.Name).ToList();
                     break;
             }
 
@@ -805,12 +859,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
 
                 switch (order)
                 {
-                    case SortOrder.Date:
+                    case SortOrder.DateDescending:
                         retVal = fileInfo.OrderByDescending(f => f.LastWriteTime).ToList();
                         break;
 
-                    case SortOrder.Name:
+                    case SortOrder.DateAscending:
+                        retVal = fileInfo.OrderBy(f => f.LastWriteTime).ToList();
+                        break;
+
+                    case SortOrder.AtoZ:
                         retVal = fileInfo.OrderBy(f => f.Name).ToList();
+                        break;
+
+                    case SortOrder.ZtoA:
+                        retVal = fileInfo.OrderByDescending(f => f.Name).ToList();
                         break;
 
                     default:
@@ -826,17 +888,17 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// Prompt the user to make a selection on what to do with the
         /// selected file.  Open it or delete it.
         /// </summary>
-        /// <param name="itemTag">file info</param>
+        /// <param name="fileInfo">file info</param>
         /// <returns>selected operation</returns>
-        private FileOperation getFileOperationFromUser(ItemTag itemTag)
+        private FileOperation getFileOperationFromUser(FileInfo fileInfo)
         {
             var retVal = FileOperation.None;
-            Form form = Context.AppPanelManager.CreatePanel("FileOperationConfirmScanner", itemTag.FInfo.Name);
+            Form form = Context.AppPanelManager.CreatePanel("FileOperationConfirmScanner", fileInfo.Name);
             if (form is FileOperationConfirmScanner)
             {
                 var fileOpScanner = form as FileOperationConfirmScanner;
-                fileOpScanner.FInfo = itemTag.FInfo;
-                Context.AppPanelManager.ShowDialog(Context.AppPanelManager.GetCurrentPanel(), form as IPanel);
+                fileOpScanner.FInfo = fileInfo;
+                Context.AppPanelManager.ShowDialog(Context.AppPanelManager.GetCurrentForm(), form as IPanel);
 
                 if (fileOpScanner.OpenFile)
                 {
@@ -852,6 +914,46 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
+        /// Returns string that graphically fits into the specified width.  If it
+        /// doesn't, curtails the string and adds ellipses
+        /// </summary>
+        /// <param name="graphics">Graphics object used to mesaure width of string</param>
+        /// <param name="font">font to use</param>
+        /// <param name="width">width to fit in</param>
+        /// <param name="inputString">input string</param>
+        /// <returns>output string that fits</returns>
+        private String getMeasuredString(Graphics graphics, Font font, int width, String inputString)
+        {
+            int chop = 5;
+
+            var str = inputString;
+
+            try
+            {
+                while (true)
+                {
+                    SizeF sf = graphics.MeasureString(str, font);
+
+                    if (sf.Width > width * ScannerCommon.PositionSizeController.ScaleFactor)
+                    {
+                        str = inputString.Substring(0, inputString.Length - chop) + "...";
+                        chop += 5;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+            catch
+            {
+                str = inputString;
+            }
+
+            return str;
+        }
+
+        /// <summary>
         /// Display the next pageful of files
         /// </summary>
         private void gotoNextPage()
@@ -859,7 +961,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
             if (_pageNumber < _numPages - 1)
             {
                 int index = _pageStartIndex + _entriesPerPage;
-                if (index < _allFilesList.Count())
+                if (index < _allFilesList.Count)
                 {
                     _pageStartIndex += _entriesPerPage;
                     _pageNumber++;
@@ -890,118 +992,77 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// <summary>
         /// Delete the file
         /// </summary>
-        /// <param name="itemTag">info about the file</param>
-        private void handleDeleteFile(ItemTag itemTag)
+        /// <param name="fileInfo">info about the file</param>
+        private void handleDeleteFile(FileInfo fileInfo)
         {
-            Windows.SetText(SearchFilter, String.Empty);
-            File.Delete(itemTag.FInfo.FullName);
-            loadFiles();
-        }
-
-        /// <summary>
-        /// Perform action on the file
-        /// </summary>
-        /// <param name="operation">what to do?</param>
-        /// <param name="itemTag">File info</param>
-        private void handleFileOperation(FileOperation operation, ItemTag itemTag)
-        {
-            switch (operation)
+            if (DialogUtils.ConfirmScanner(String.Format(R.GetString("DeleteFileQ"), fileInfo.Name)))
             {
-                case FileOperation.Open:
-                    SelectedFile = itemTag.FInfo.FullName;
-                    if (EvtFileOpen != null)
-                    {
-                        EvtFileOpen.BeginInvoke(this, new EventArgs(), null, null);
-                    }
-
-                    break;
-
-                case FileOperation.Delete:
-                    handleDeleteFile(itemTag);
-                    break;
+                Windows.SetText(SearchFilter, String.Empty);
+                File.Delete(fileInfo.FullName);
+                loadFiles();
             }
         }
 
-        /// <summary>
-        /// Highlight the specifed widget. cmd suffix indicates
-        ///  the index number of the widget
-        /// </summary>
-        /// <param name="cmd">highlight command</param>
-        private void handleHighlight(String cmd)
+        private void handleOpenFile(FileInfo fileInfo)
         {
-            if (cmd.Equals("highlight_off", StringComparison.InvariantCultureIgnoreCase))
+            if (DialogUtils.ConfirmScanner(String.Format(R.GetString("OpenFileQ"), fileInfo.Name)))
             {
-                highlightOff();
-            }
-            else
-            {
-                int index = cmd.LastIndexOf('_');
-                if (index >= 0 && index < cmd.Length - 1)
+                SelectedFile = fileInfo.FullName;
+                if (EvtFileOpen != null)
                 {
-                    String widgetName = "Item" + cmd.Substring(index + 1);
-                    highlight(widgetName);
+                    EvtFileOpen.BeginInvoke(this, new EventArgs(), null, null);
                 }
             }
         }
 
-        /// <summary>
-        /// Handle selecion of a file
-        /// </summary>
-        /// <param name="cmd">which one to select?</param>
-        private void handleSelect(String cmd)
-        {
-            int index = cmd.LastIndexOf('_');
-            if (index >= 0 && index < cmd.Length - 1)
-            {
-                actuateWidget("Item" + cmd.Substring(index + 1));
-            }
-        }
-
-        /// <summary>
         /// Handle actuation of a widget - navigate, select file
         /// etc depending on what the widget represents
         /// </summary>
-        /// <param name="itemTag"></param>
-        private void handleSelect(ItemTag itemTag)
+        /// <param name="widget">widget to actuate</param>
+        /// <param name="handled">true if handled</param>
+        private void handleWidgetSelection(Widget widget, ref bool handled)
         {
-            bool doHighlightOff = true;
-
-            switch (itemTag.DataType)
+            if (widget.UserData is FileInfo)
             {
-                case ItemTag.ItemType.NextPage:
-                    gotoNextPage();
-                    break;
-
-                case ItemTag.ItemType.PreviousPage:
-                    gotoPreviousPage();
-                    break;
-
-                case ItemTag.ItemType.OrderBy:
-                    switchSortOrder();
-                    break;
-
-                case ItemTag.ItemType.File:
-                    doHighlightOff = onFileSelected(itemTag);
-                    break;
+                onFileSelected((FileInfo)widget.UserData);
+                handled = true;
             }
-
-            if (doHighlightOff)
+            else
             {
-                highlightOff();
-            }
-        }
+                handled = true;
+                switch (widget.Value)
+                {
+                    case "@CmdGoBack":
+                        close();
+                        break;
 
-        /// <summary>
-        /// Highlight the specified widget
-        /// </summary>
-        /// <param name="widgetName">which one?</param>
-        private void highlight(String widgetName)
-        {
-            _scannerCommon.GetRootWidget().HighlightOff();
-            Widget widget = _scannerCommon.GetRootWidget().Finder.FindChild(widgetName);
-            if (widget != null)
-            {
-                widget.HighlightOn();
+                    case "@FileListSort":
+                        switchSortOrder();
+                        break;
+
+                    case "@CmdNextPage":
+                        gotoNextPage();
+                        break;
+
+                    case "@CmdPrevPage":
+                        gotoPreviousPage();
+                        break;
+
+                    case "@FileListClearFilter":
+                        ClearFilter();
+                        break;
+
+                    case "@FileListSearch":
+                        if (EvtShowScanner != null)
+                        {
+                            EvtShowScanner.BeginInvoke(null, null, null, null);
+                        }
+                        break;
+
+                    default:
+                        handled = false;
+                        break;
+                }
             }
         }
 
@@ -1010,7 +1071,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// </summary>
         private void highlightOff()
         {
-            _scannerCommon.GetRootWidget().HighlightOff();
+            PanelCommon.RootWidget.HighlightOff();
         }
 
         /// <summary>
@@ -1035,7 +1096,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
                 extension = extension.Substring(1).ToLower();
             }
 
-            if (!String.IsNullOrEmpty(filter) && !fileInfo.Name.StartsWith(filter, StringComparison.InvariantCultureIgnoreCase))
+            if (!String.IsNullOrEmpty(filter) &&
+                !fileInfo.Name.StartsWith(filter, StringComparison.InvariantCultureIgnoreCase))
             {
                 add = false;
             }
@@ -1051,21 +1113,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
             }
 
             return add;
-        }
-
-        /// <summary>
-        /// Invoked when the companian scanner is shown. Dock
-        /// this scanner with the companian.
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void Instance_EvtScannerShow(object sender, ScannerShowEventArg arg)
-        {
-            if (arg.Scanner != this)
-            {
-                _dockedWithForm = arg.Scanner.Form;
-                dockToScanner(arg.Scanner.Form);
-            }
         }
 
         /// <summary>
@@ -1087,39 +1134,37 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         /// User selected a file from the list.  If reqd,
         /// ask the user if she wants to open or delete the file
         /// </summary>
-        /// <param name="itemTag">Tag of the file item selected</param>
+        /// <param name="fileInfo">FileInfo of the file selected</param>
         /// <returns>true on success</returns>
-        private bool onFileSelected(ItemTag itemTag)
+        private bool onFileSelected(FileInfo fileInfo)
         {
             bool doHighlightOff = true;
 
-            if (itemTag != null && itemTag.FInfo != null && File.Exists(itemTag.FInfo.FullName))
+            if (fileInfo == null || !File.Exists(fileInfo.FullName))
             {
-                FileOperation operation = FileOperation.None;
-                if (SelectActionOpen)
-                {
-                    if (DialogUtils.ConfirmScanner(ActionVerb + " " + itemTag.FInfo.Name + "?"))
-                    {
-                        operation = FileOperation.Open;
-                    }
-                }
-                else
-                {
-                    operation = getFileOperationFromUser(itemTag);
-                }
+                return true;
+            }
 
-                if (operation != FileOperation.None)
-                {
-                    handleFileOperation(operation, itemTag);
-                    if (operation == FileOperation.Open)
-                    {
-                        doHighlightOff = false;
-                    }
-                }
-                else
-                {
-                    SelectedFile = String.Empty;
-                }
+            var operation = (Action == FileOperation.UserChoice) ?
+                                        getFileOperationFromUser(fileInfo) :
+                                        Action;
+
+            if (operation == FileOperation.Open)
+            {
+                handleOpenFile(fileInfo);
+            }
+            else if (operation == FileOperation.Delete)
+            {
+                handleDeleteFile(fileInfo);
+            }
+
+            if (operation == FileOperation.Open)
+            {
+                doHighlightOff = false;
+            }
+            else
+            {
+                SelectedFile = String.Empty;
             }
 
             return doHighlightOff;
@@ -1131,90 +1176,61 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         private void refreshFileList()
         {
             var list = new List<Widget>();
-            _scannerCommon.GetRootWidget().Finder.FindChild(typeof(TabStopScannerButton), list);
+            PanelCommon.RootWidget.Finder.FindChild(typeof(TabStopScannerButton), list);
 
-            int count = list.Count();
-            if (count >= 3)
+            int count = list.Count;
+            if (count == 0)
             {
-                foreach (Widget button in list)
-                {
-                    button.UserData = null;
-                    button.SetText(String.Empty);
-                }
-
-                _entriesPerPage = count - 2;
-                _numPages = _fileList.Count() / _entriesPerPage;
-
-                if ((_fileList.Count() % _entriesPerPage) != 0)
-                {
-                    _numPages++;
-                }
-
-                updateStatusBar();
-
-                if (!_fileList.Any())
-                {
-                    (list[0] as TabStopScannerButton).SetTabStops(0.0f, new float[] { 25, 400 });
-                    list[0].SetText("------------- NO FILES FOUND -------------");
-                    return;
-                }
-
-                int ii = 0;
-
-                int displayIndex = (ii + 1) % 10;
-
-                (list[ii] as TabStopScannerButton).SetTabStops(0.0f, new float[] { 25, 400 });
-                if (_pageNumber == 0)
-                {
-                    list[ii].UserData = new ItemTag(ItemTag.ItemType.OrderBy);
-                    if (_sortOrder == SortOrder.Date)
-                    {
-                        list[ii].SetText(displayIndex + ".\t------------- SORT BY NAME -------------");
-                    }
-                    else
-                    {
-                        list[ii].SetText(displayIndex + ".\t------------- SORT BY DATE -------------");
-                    }
-                }
-                else
-                {
-                    list[ii].UserData = new ItemTag(ItemTag.ItemType.PreviousPage);
-                    list[ii].SetText(displayIndex + ".\t------------- PREVIOUS PAGE  -------------");
-                }
-
-                ii++;
-
-                for (int jj = _pageStartIndex; jj < _fileList.Count && ii < count - 1; ii++, jj++)
-                {
-                    displayIndex = (ii + 1) % 10;
-                    (list[ii] as TabStopScannerButton).SetTabStops(0.0f, new float[] { 25, 400 });
-                    list[ii].UserData = new ItemTag(_fileList[jj]);
-                    String name = _fileList[jj].Name;
-                    if (name.Length > MaxFileNameChars)
-                    {
-                        name = name.Substring(0, MaxFileNameChars) + "...";
-                    }
-
-                    list[ii].SetText(displayIndex + ".\t" + name + "\t" + _fileList[jj].LastWriteTime.ToString(Common.AppPreferences.FileBrowserDateFormat));
-                }
-
-                Log.Debug("_pageNumber: " + _pageNumber + ", _numPages: " + _numPages);
-
-                if (_pageNumber < _numPages - 1)
-                {
-                    displayIndex = (ii + 1) % 10;
-                    (list[ii] as TabStopScannerButton).SetTabStops(0.0f, new float[] { 25, 400 });
-                    list[ii].UserData = new ItemTag(ItemTag.ItemType.NextPage);
-                    list[ii].SetText(displayIndex + ".\t------------- NEXT PAGE  -------------");
-                    ii++;
-                }
-
-                for (; ii < count; ii++)
-                {
-                    list[ii].SetText(String.Empty);
-                    list[ii].UserData = null;
-                }
+                return;
             }
+
+            foreach (Widget button in list)
+            {
+                button.UserData = null;
+                button.SetText(String.Empty);
+            }
+
+            _entriesPerPage = count;
+            _numPages = _fileList.Count() / _entriesPerPage;
+
+            if ((_fileList.Count() % _entriesPerPage) != 0)
+            {
+                _numPages++;
+            }
+
+            updateButtonBar();
+
+            updateStatusBar();
+
+            if (!_fileList.Any())
+            {
+                (list[0] as TabStopScannerButton).SetTabStops(0.0f, new float[] { 100 });
+                list[0].SetText("\t" + R.GetString("NoFilesFound"));
+                return;
+            }
+
+            int ii = 0;
+            var image = new Bitmap(1, 1);
+            var graphics = Graphics.FromImage(image);
+            int tabStop = 500;
+
+            for (int jj = _pageStartIndex; jj < _fileList.Count && ii < count; ii++, jj++)
+            {
+                var tabStopScannerButton = list[ii] as TabStopScannerButton;
+                tabStopScannerButton.SetTabStops(0.0f, new float[] { 25, tabStop });
+                list[ii].UserData = _fileList[jj];
+
+                var name = _fileList[jj].Name;
+
+                var str = getMeasuredString(graphics, tabStopScannerButton.UIControl.Font, tabStop, name);
+
+                string shortDateFormatString = System.Globalization.CultureInfo.DefaultThreadCurrentUICulture.DateTimeFormat.ShortDatePattern;
+
+                list[ii].SetText(str + "\t" + _fileList[jj].LastWriteTime.ToString(shortDateFormatString));
+            }
+
+            image.Dispose();
+            graphics.Dispose();
         }
 
         /// <summary>
@@ -1264,11 +1280,38 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
+        /// Subscribes to the various events
+        /// </summary>
+        private void subscribeToEvents()
+        {
+            FormClosing += FileBrowserScanner_FormClosing;
+            Shown += FileBrowserScanner_Shown;
+            KeyDown += FileBrowserScanner_KeyDown;
+        }
+
+        /// <summary>
         /// Resort the file list and refresh it in the display
         /// </summary>
         private void switchSortOrder()
         {
-            _sortOrder = _sortOrder == SortOrder.Date ? SortOrder.Name : SortOrder.Date;
+            switch (_sortOrder)
+            {
+                case SortOrder.DateDescending:
+                    _sortOrder = SortOrder.DateAscending;
+                    break;
+
+                case SortOrder.DateAscending:
+                    _sortOrder = SortOrder.AtoZ;
+                    break;
+
+                case SortOrder.AtoZ:
+                    _sortOrder = SortOrder.ZtoA;
+                    break;
+
+                case SortOrder.ZtoA:
+                    _sortOrder = SortOrder.DateDescending;
+                    break;
+            }
 
             _pageNumber = 0;
             _pageStartIndex = 0;
@@ -1278,71 +1321,154 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.FileBrowser
         }
 
         /// <summary>
-        /// Updates status bar with page number
+        /// Updates the icons in the button bar depending on
+        /// the context
         /// </summary>
-        private void updateStatusBar()
+        private void updateButtonBar()
         {
+            String text;
+
+            if (!_fileList.Any())
+            {
+                text = String.Empty;
+            }
+            else if (_sortOrder == SortOrder.DateAscending || _sortOrder == SortOrder.AtoZ)
+            {
+                text = "\u003A";
+            }
+            else
+            {
+                text = "\u003B";
+            }
+
             if (_sortOrderWidget != null)
             {
-                String text;
-                if (_fileList.Any() && _sortOrder == SortOrder.Date)
+                _sortOrderWidget.SetText(text);
+            }
+
+            if (_sortButton != null)
+            {
+                String buttonText;
+
+                if (_sortOrder == SortOrder.DateAscending || _sortOrder == SortOrder.DateDescending)
                 {
-                    text = "9";
+                    buttonText = "9";
                 }
                 else
                 {
-                    text = "0";
+                    buttonText = "0";
                 }
 
-                _sortOrderWidget.SetText(text);
+                _sortButton.SetText(buttonText);
             }
 
             if (_pageNumberWidget != null)
             {
-                var text = (_fileList.Any()) ? "Page " + (_pageNumber + 1) + " of " + _numPages : String.Empty;
+                var str = String.Format(R.GetString("PageNofM"), (_pageNumber + 1), _numPages);
+                text = (_fileList.Any()) ? str : String.Empty;
                 _pageNumberWidget.SetText(text);
             }
         }
 
         /// <summary>
-        /// User clicked on a file
+        /// Updates the status bar with the current sort order
         /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void widget_EvtMouseClicked(object sender, WidgetEventArgs e)
+        private void updateStatusBar()
         {
-            actuateWidget(e.SourceWidget.Name);
+            var text = String.Empty;
+
+            if (!_fileList.Any())
+            {
+                toolStripStatusLabel1.Text = String.Empty;
+                return;
+            }
+
+            switch (_sortOrder)
+            {
+                case SortOrder.AtoZ:
+                    text = R.GetString("SortOrderAlphabetical");
+                    break;
+
+                case SortOrder.ZtoA:
+                    text = R.GetString("SortOrderReverseAlphabetical");
+                    break;
+
+                case SortOrder.DateAscending:
+                    text = R.GetString("SortOrderChronological");
+                    break;
+
+                case SortOrder.DateDescending:
+                    text = R.GetString("SortOrderReverseChronological");
+                    break;
+            }
+
+            toolStripStatusLabel1.Text = text;
         }
 
         /// <summary>
-        /// Tag to keep track of info of a widget
-        /// in the file list.  Holds file information
+        /// Position of the scanner changed.  If there is a companion
+        /// scanner, dock to it
         /// </summary>
-        private class ItemTag
+        /// <param name="form">the form</param>
+        /// <param name="position">its position</param>
+        private void Windows_EvtWindowPositionChanged(Form form, Windows.WindowPosition position)
         {
-            public ItemTag(ItemType type)
+            if (form != this)
             {
-                DataType = type;
-                FInfo = null;
+                dockToScanner(form);
+            }
+        }
+
+        /// <summary>
+        /// Handler for dispatching commands
+        /// </summary>
+        private class CommandHandler : RunCommandHandler
+        {
+            /// <summary>
+            /// Initializes a new instance of the class.
+            /// </summary>
+            /// <param name="cmd">the command to execute</param>
+            public CommandHandler(String cmd)
+                : base(cmd)
+            {
             }
 
-            public ItemTag(FileInfo info)
+            /// <summary>
+            /// Executes the command
+            /// </summary>
+            /// <param name="handled">true if it was handled</param>
+            /// <returns>true on success</returns>
+            public override bool Execute(ref bool handled)
             {
-                DataType = ItemType.File;
-                FInfo = info;
-            }
+                handled = true;
 
-            public enum ItemType
+                var form = Dispatcher.Scanner.Form as FileBrowserScanner;
+
+                switch (Command)
+                {
+                    case "CmdGoBack":
+                        form.close();
+                        break;
+                }
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Command dispatcher
+        /// </summary>
+        private class Dispatcher : DefaultCommandDispatcher
+        {
+            /// <summary>
+            /// Initializes a new instance of the class.
+            /// </summary>
+            /// <param name="panel">the scanner object</param>
+            public Dispatcher(IScannerPanel panel)
+                : base(panel)
             {
-                OrderBy,
-                PreviousPage,
-                NextPage,
-                File
+                Commands.Add(new CommandHandler("CmdGoBack"));
             }
-
-            public ItemType DataType { get; private set; }
-
-            public FileInfo FInfo { get; private set; }
         }
     }
 }

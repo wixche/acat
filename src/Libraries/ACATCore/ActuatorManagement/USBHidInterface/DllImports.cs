@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="DLLImports.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,39 +22,6 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
-#region SupressStyleCopWarnings
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-#endregion
-
 namespace ACAT.Lib.Core.ActuatorManagement
 {
     /// <summary>
@@ -62,23 +29,120 @@ namespace ACAT.Lib.Core.ActuatorManagement
     /// </summary>
     public class DllImports
     {
+        public const int DIGCF_DEVICEINTERFACE = 0x00000010;
         public const int DIGCF_INTERFACEDEVICE = 0x00000010;
         public const int DIGCF_PRESENT = 0x00000002;
-        public const int DIGCF_DEVICEINTERFACE = 0x00000010;
-
-        public const int OPEN_EXISTING = 3;
-
-        public const int ERROR_INVALID_HANDLE = 6;
-        public const int INVALID_HANDLE_VALUE = -1;
-
-        public const uint FILE_FLAG_OVERLAPPED = 0x40000000;
         public const int DUPLICATE_SAME_ACCESS = 0x00000002;
-
+        public const int ERROR_INVALID_HANDLE = 6;
+        public const uint FILE_FLAG_OVERLAPPED = 0x40000000;
+        public const uint FILE_SHARE_READ = 0x00000001;
+        public const uint FILE_SHARE_WRITE = 0x00000002;
         public const uint GENERIC_READ = 0x80000000;
         public const uint GENERIC_WRITE = 0x40000000;
+        public const int INVALID_HANDLE_VALUE = -1;
+        public const int OPEN_EXISTING = 3;
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CancelSynchronousIo(IntPtr threadHandle);
 
-        public const uint FILE_SHARE_WRITE = 0x00000002;
-        public const uint FILE_SHARE_READ = 0x00000001;
+        [DllImport("kernel32.dll")]
+        static public extern int CloseHandle(int hObject);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern int CreateFile(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            uint lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            uint hTemplateFile
+            );
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool DuplicateHandle(
+            IntPtr hSourceProcessHandle,
+            IntPtr hSourceHandle,
+            IntPtr hTargetProcessHandle,
+            out IntPtr lpTargetHandle,
+            uint dwDesiredAccess,
+            bool bInheritHandle,
+            uint dwOptions);
+
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr GetCurrentThread();
+
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern int HidD_FreePreparsedData(
+            int pPHIDP_PREPARSED_DATA
+            );
+
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern void HidD_GetHidGuid(
+            ref GUID lpHidGuid);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern int HidD_GetPreparsedData(
+            int hObject,
+            ref int pPHIDP_PREPARSED_DATA);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern int HidP_GetCaps(
+            int pPHIDP_PREPARSED_DATA,
+            ref HIDP_CAPS myPHIDP_CAPS);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool ReadFile(
+            int hFile,
+            byte[] lpBuffer,
+            int nNumberOfBytesToRead,
+            ref int lpNumberOfBytesRead,
+            IntPtr ptr
+            );
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        public static extern int SetupDiDestroyDeviceInfoList(
+            int DeviceInfoSet
+            );
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        public static extern int SetupDiEnumDeviceInterfaces(
+            int DeviceInfoSet,
+            int DeviceInfoData,
+            ref  GUID lpHidGuid,
+            int MemberIndex,
+            ref  SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        public static extern int SetupDiGetClassDevs(
+            ref GUID lpHidGuid,
+            IntPtr Enumerator,
+            IntPtr hwndParent,
+            int Flags);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        public static extern int SetupDiGetDeviceInterfaceDetail(
+            int DeviceInfoSet,
+            ref SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData,
+            IntPtr aPtr,
+            int detailSize,
+            ref int requiredSize,
+            IntPtr bPtr);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        public static extern int SetupDiGetDeviceInterfaceDetail(
+            int DeviceInfoSet,
+            ref SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData,
+            ref PSP_DEVICE_INTERFACE_DETAIL_DATA myPSP_DEVICE_INTERFACE_DETAIL_DATA,
+            int detailSize,
+            ref int requiredSize,
+            IntPtr bPtr);
+
+        [DllImport("kernel32.dll")]
+        static public extern int WriteFile(int hFile, ref byte lpBuffer,
+                        int nNumberOfBytesToWrite, ref int lpNumberOfBytesWritten, int lpOverlapped);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct GUID
@@ -128,108 +192,5 @@ namespace ACAT.Lib.Core.ActuatorManagement
             public int Flags;
             public int Reserved;
         }
-
-        [DllImport("hid.dll", SetLastError = true)]
-        public static extern void HidD_GetHidGuid(
-            ref GUID lpHidGuid);
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        public static extern int SetupDiGetClassDevs(
-            ref GUID lpHidGuid,
-            IntPtr Enumerator,
-            IntPtr hwndParent,
-            int Flags);
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        public static extern int SetupDiEnumDeviceInterfaces(
-            int DeviceInfoSet,
-            int DeviceInfoData,
-            ref  GUID lpHidGuid,
-            int MemberIndex,
-            ref  SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData);
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        public static extern int SetupDiGetDeviceInterfaceDetail(
-            int DeviceInfoSet,
-            ref SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData,
-            IntPtr aPtr,
-            int detailSize,
-            ref int requiredSize,
-            IntPtr bPtr);
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        public static extern int SetupDiGetDeviceInterfaceDetail(
-            int DeviceInfoSet,
-            ref SP_DEVICE_INTERFACE_DATA lpDeviceInterfaceData,
-            ref PSP_DEVICE_INTERFACE_DETAIL_DATA myPSP_DEVICE_INTERFACE_DETAIL_DATA,
-            int detailSize,
-            ref int requiredSize,
-            IntPtr bPtr);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern int CreateFile(
-            string lpFileName,
-            uint dwDesiredAccess,
-            uint dwShareMode,
-            uint lpSecurityAttributes,
-            uint dwCreationDisposition,
-            uint dwFlagsAndAttributes,
-            uint hTemplateFile
-            );
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool CancelSynchronousIo(IntPtr threadHandle);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern IntPtr GetCurrentThread();
-
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetCurrentProcess();
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        public static extern bool DuplicateHandle(
-            IntPtr hSourceProcessHandle,
-            IntPtr hSourceHandle,
-            IntPtr hTargetProcessHandle,
-            out IntPtr lpTargetHandle,
-            uint dwDesiredAccess,
-            bool bInheritHandle,
-            uint dwOptions);
-
-        [DllImport("hid.dll", SetLastError = true)]
-        public static extern int HidD_GetPreparsedData(
-            int hObject,
-            ref int pPHIDP_PREPARSED_DATA);
-
-        [DllImport("hid.dll", SetLastError = true)]
-        public static extern int HidP_GetCaps(
-            int pPHIDP_PREPARSED_DATA,
-            ref HIDP_CAPS myPHIDP_CAPS);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        public  static extern bool ReadFile(
-            int hFile,
-            byte[] lpBuffer,
-            int nNumberOfBytesToRead,
-            ref int lpNumberOfBytesRead,
-            IntPtr ptr
-            );
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        public static extern  int SetupDiDestroyDeviceInfoList(
-            int DeviceInfoSet
-            );
-
-        [DllImport("hid.dll", SetLastError = true)]
-        public static extern  int HidD_FreePreparsedData(
-            int pPHIDP_PREPARSED_DATA
-            );
-
-        [DllImport("kernel32.dll")]
-        static public extern int CloseHandle(int hObject);
-
-        [DllImport("kernel32.dll")]
-        static public extern int WriteFile(int hFile, ref byte lpBuffer, 
-                        int nNumberOfBytesToWrite, ref int lpNumberOfBytesWritten, int lpOverlapped);
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AgentUtils.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Windows.Automation;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AgentManagement
 {
@@ -74,8 +38,13 @@ namespace ACAT.Lib.Core.AgentManagement
         /// <param name="className">class name </param>
         /// <param name="controlType">controlType</param>
         /// <param name="automationId">automation id </param>
+        /// <param name="name">optional, name of the element to search for</param>
         /// <returns>automation element if found null otherwise</returns>
-        public static AutomationElement FindElementByAutomationId(AutomationElement focusedElement, String className, object controlType, String automationId)
+        public static AutomationElement FindElementByAutomationId(AutomationElement focusedElement,
+                                                                    String className,
+                                                                    object controlType,
+                                                                    String automationId,
+                                                                    String name = "")
         {
             var controlTypeProperty = new PropertyCondition(AutomationElement.ControlTypeProperty, controlType);
             var automationIdProperty = new PropertyCondition(AutomationElement.AutomationIdProperty, automationId);
@@ -83,6 +52,12 @@ namespace ACAT.Lib.Core.AgentManagement
             var findControl = new AndCondition(controlTypeProperty, automationIdProperty, classNameProperty);
 
             var retVal = focusedElement.FindFirst(TreeScope.Descendants, findControl);
+
+            if (retVal != null && !String.IsNullOrEmpty(name))
+            {
+                retVal = ((String.Compare(retVal.Current.Name, name, true) == 0) ? retVal : null);
+            }
+
             return retVal;
         }
 
@@ -95,7 +70,10 @@ namespace ACAT.Lib.Core.AgentManagement
         /// <param name="controlType">controlType of the ancestor</param>
         /// <param name="automationId">automation id of the ancestor</param>
         /// <returns>true if it is</returns>
-        public static AutomationElement GetElementOrAncestorByAutomationId(AutomationElement focusedElement, String className, String controlType, String automationId)
+        public static AutomationElement GetElementOrAncestorByAutomationId(AutomationElement focusedElement,
+                                                                            String className,
+                                                                            String controlType,
+                                                                            String automationId)
         {
             var walker = TreeWalker.ControlViewWalker;
 
@@ -163,6 +141,45 @@ namespace ACAT.Lib.Core.AgentManagement
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Inserts the specified string value into the control
+        /// referenced by the element
+        /// </summary>
+        /// <param name="element">the element into which to insert text</param>
+        /// <param name="value">text to insert</param>
+        public static void InsertTextIntoElement(AutomationElement element, string value)
+        {
+            if (element == null || value == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!element.Current.IsEnabled || !element.Current.IsKeyboardFocusable)
+                {
+                    Log.Debug("Control not enabled or keyboard focusable. AutomationID " + element.Current.AutomationId);
+                    return;
+                }
+
+                object valuePattern;
+                if (!element.TryGetCurrentPattern(ValuePattern.Pattern, out valuePattern))
+                {
+                    element.SetFocus();
+                    SendKeys.SendWait(value);
+                }
+                else
+                {
+                    element.SetFocus();
+                    ((ValuePattern)valuePattern).SetValue(value);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex.ToString());
+            }
         }
 
         /// <summary>
@@ -248,6 +265,34 @@ namespace ACAT.Lib.Core.AgentManagement
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Checks if the focusedElement has the specified className, controlType
+        /// and automationID
+        /// </summary>
+        /// <param name="focusedElement">control that has focus</param>
+        /// <param name="className">class name of the ancestor</param>
+        /// <param name="controlType">controlType of the ancestor</param>
+        /// <param name="automationId">automation id of the ancestor</param>
+        /// <param name="name">(optional) name of the element</param>
+        /// <returns>true if it is</returns>
+        public static bool IsElementByAutomationId(AutomationElement focusedElement,
+                                                            String className,
+                                                            String controlType,
+                                                            String automationId,
+                                                            String name = "")
+        {
+            bool retVal = (String.Compare(focusedElement.Current.ClassName, className, true) == 0 &&
+                    String.Compare(focusedElement.Current.ControlType.ProgrammaticName, controlType, true) == 0 &&
+                    String.Compare(focusedElement.Current.AutomationId, automationId, true) == 0);
+
+            if (!String.IsNullOrEmpty(name))
+            {
+                retVal = (String.Compare(focusedElement.Current.Name, name, true) == 0);
+            }
+
+            return retVal;
         }
 
         /// <summary>
@@ -365,27 +410,6 @@ namespace ACAT.Lib.Core.AgentManagement
         }
 
         /// <summary>
-        /// Checks if the specified key (such as alt, ctrl, shift)
-        /// is down
-        /// </summary>
-        /// <param name="vKey">key to check</param>
-        /// <returns>true if it is</returns>
-        public static bool IsKeyDown(Keys vKey)
-        {
-            return 0 != (User32Interop.GetAsyncKeyState((int)vKey) & 0x8000);
-        }
-
-        /// <summary>
-        /// Returns if the specified key is printable or not
-        /// </summary>
-        /// <param name="key">key to check</param>
-        /// <returns>true if it is</returns>
-        public static bool IsPrintable(Keys key)
-        {
-            return key == Keys.Enter || !char.IsControl((char)User32Interop.MapVirtualKey((int)key, 2));
-        }
-
-        /// <summary>
         /// Checks if the control identified by className, controlType and
         /// automationIid is a sibling of the focusedElement.
         /// </summary>
@@ -415,45 +439,6 @@ namespace ACAT.Lib.Core.AgentManagement
                 }
             }
             return false;
-        }
-
-        /// <summary>
-        /// Inserts the specified string value into the control
-        /// referenced by the element
-        /// </summary>
-        /// <param name="element">the element into which to insert text</param>
-        /// <param name="value">text to insert</param>
-        public static void InsertTextIntoElement(AutomationElement element, string value)
-        {
-            if (element == null || value == null)
-            {
-                return;
-            }
-
-            try
-            {
-                if (!element.Current.IsEnabled || !element.Current.IsKeyboardFocusable)
-                {
-                    Log.Debug("Control not enabled or keyboard focusable. AutomationID " + element.Current.AutomationId);
-                    return;
-                }
-
-                object valuePattern;
-                if (!element.TryGetCurrentPattern(ValuePattern.Pattern, out valuePattern))
-                {
-                    element.SetFocus();
-                    SendKeys.SendWait(value);
-                }
-                else
-                {
-                    element.SetFocus();
-                    ((ValuePattern)valuePattern).SetValue(value);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex.ToString());
-            }
         }
     }
 }

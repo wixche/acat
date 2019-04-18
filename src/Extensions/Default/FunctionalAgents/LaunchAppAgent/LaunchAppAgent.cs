@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="LaunchAppAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,62 +18,34 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Windows.Automation;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension;
+using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
+namespace ACAT.Extensions.Default.FunctionalAgents.LaunchAppAgent
 {
     /// <summary>
     /// Agent that allows the user to launch applications. The
     /// list of applications and the command line args are configurable
+    /// through an external XML file.  The LaunchAppScanner reads the
+    /// xml file, parses it and build the list of apps.  The list
+    /// of apps is diplayed in the form and the user selects the app
+    /// to launch
     /// </summary>
-    [DescriptorAttribute("AC74FFEA-4B1C-4707-93E4-2D6BA98C9EA0", "Launch App Agent",
-                            "Allows the user to launch an application")]
+    [DescriptorAttribute("AC74FFEA-4B1C-4707-93E4-2D6BA98C9EA0",
+                            "Application Launcher",
+                            "LaunchAppAgent",
+                            "Launch applications from a list of preferred apps")]
     internal class LaunchAppAgent : FunctionalAgentBase
     {
         /// <summary>
@@ -92,33 +64,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         private static LaunchAppScanner _launchAppScanner;
 
         /// <summary>
-        /// Widgets to be enabled.  These are the widgets used
-        /// in the scanner and they hold the list of apps
-        /// </summary>
-        private readonly String[] _supportedFeatures =
-        {
-            "Select_1",
-            "Select_2",
-            "Select_3",
-            "Select_4",
-            "Select_5",
-            "Select_6",
-            "Select_7",
-            "Select_8",
-            "Select_9",
-            "Select_10",
-        };
-
-        /// <summary>
         /// AppInfo of the application selected by the user
         /// to launch
         /// </summary>
         private AppInfo _appToLaunchInfo;
-
-        /// <summary>
-        /// Has the launchapp scanner been shown?
-        /// </summary>
-        private bool _scannerShown;
 
         /// <summary>
         /// Initializes a new instance of the class.
@@ -127,7 +76,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         {
             LaunchAppSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
             Settings = LaunchAppSettings.Load();
-            initProperties();
         }
 
         /// <summary>
@@ -137,7 +85,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <returns>true on success</returns>
         public override bool Activate()
         {
-            _scannerShown = false;
+            IsClosing = false;
+
             ExitCode = CompletionCode.ContextSwitch;
             _appToLaunchInfo = null;
             _launchAppScanner = Context.AppPanelManager.CreatePanel("LaunchAppScanner") as LaunchAppScanner;
@@ -147,10 +96,13 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
                 _launchAppScanner.FormClosing += _form_FormClosing;
                 _launchAppScanner.EvtQuit += _launchAppScanner_EvtQuit;
                 _launchAppScanner.EvtLaunchApp += _launchAppScanner_EvtLaunchApp;
+                _launchAppScanner.EvtShowScanner += launchAppScanner_EvtShowScanner;
+
+                IsActive = true;
 
                 Context.AppPanelManager.ShowDialog(_launchAppScanner);
             }
-            
+
             return true;
         }
 
@@ -159,26 +111,28 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// to determine the 'enabled' state.
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            if (_launchAppScanner != null)
+            arg.Handled = true;
+
+            switch (arg.Command)
             {
-                switch (arg.Widget.SubClass)
-                {
-                    case "FileBrowserToggle":
-                        arg.Handled = true;
+                case "CmdPunctuationScanner":
+                case "CmdNumberScanner":
+                    arg.Enabled = true;
+                    break;
+
+                default:
+                    if (_launchAppScanner != null)
+                    {
+                        _launchAppScanner.CheckCommandEnabled(arg);
+                    }
+                    if (!arg.Handled)
+                    {
                         arg.Enabled = false;
-                        return;
-
-                    case "Back":
-                    case "DeletePreviousWord":
-                    case "clearText":
-                        arg.Enabled = _launchAppScanner != null && !_launchAppScanner.IsFilterEmpty();
                         arg.Handled = true;
-                        return;
-                }
-
-                checkWidgetEnabled(_supportedFeatures, arg);
+                    }
+                    break;
             }
         }
 
@@ -190,35 +144,17 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <param name="handled">was this handled</param>
         public override void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
-            Log.Debug("OnFocus: " + monitorInfo.ToString() + ", menushown: " + _scannerShown);
+            if (IsClosing)
+            {
+                Log.Debug("IsClosing is true.  Will not handle the focus change");
+                return;
+            }
+
+            Log.Debug("OnFocus: " + monitorInfo);
 
             base.OnFocusChanged(monitorInfo, ref handled);
 
-            if (!_scannerShown && _launchAppScanner != null)
-            {
-                var arg = new PanelRequestEventArgs(PanelClasses.AlphabetMinimal, monitorInfo)
-                {
-                    TargetPanel = _launchAppScanner,
-                    RequestArg = _launchAppScanner,
-                    UseCurrentScreenAsParent = true
-                };
-                showPanel(this, arg);
-                _scannerShown = true;
-            }
-
             handled = true;
-        }
-
-        /// <summary>
-        /// Pauses the agent.  Hides scanners and pauses them
-        /// </summary>
-        public override void OnPause()
-        {
-            if (_launchAppScanner != null)
-            {
-                Windows.SetVisible(_launchAppScanner, false);
-                Context.AppPanelManager.GetCurrentPanel().OnPause();
-            }
         }
 
         /// <summary>
@@ -233,19 +169,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         }
 
         /// <summary>
-        /// Resume the agent. Show scanners and resume
-        /// </summary>
-        public override void OnResume()
-        {
-            if (_launchAppScanner != null)
-            {
-                Context.AppPanelManager.GetCurrentPanel().OnResume();
-                Windows.SetTopMost(_launchAppScanner);
-                Windows.SetVisible(_launchAppScanner, true);
-            }
-        }
-
-        /// <summary>
         /// Invoked when there is a request to run a command. This
         /// could as a result of the user activating a button on the
         /// scanner and there is a command associated with the button
@@ -255,22 +178,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <param name="handled">was this handled?</param>
         public override void OnRunCommand(String command, object commandArg, ref bool handled)
         {
-            handled = true;
-
-            switch (command)
+            if (_launchAppScanner != null)
             {
-                case "clearText":
-                    _launchAppScanner.ClearFilter();
-                    break;
-
-                default:
-                    Log.Debug(command);
-                    if (_launchAppScanner != null)
-                    {
-                        _launchAppScanner.OnRunCommand(command, ref handled);
-                    }
-
-                    break;
+                _launchAppScanner.OnRunCommand(command, ref handled);
             }
         }
 
@@ -298,18 +208,22 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         {
             if (_launchAppScanner != null)
             {
+                _launchAppScanner.FormClosing -= _form_FormClosing;
                 _launchAppScanner.EvtQuit -= _launchAppScanner_EvtQuit;
+                _launchAppScanner.EvtLaunchApp -= _launchAppScanner_EvtLaunchApp;
+                _launchAppScanner.EvtShowScanner -= launchAppScanner_EvtShowScanner;
             }
 
-            initProperties();
             _launchAppScanner = null;
         }
 
         /// <summary>
-        /// Request came in to launch an app
+        /// Request came in to launch an app. Launch
+        /// the specified application.  After launching,
+        /// the scanner and the agent are both closed.
         /// </summary>
         /// <param name="sender">event sender</param>
-        /// <param name="appinfo">which app to launch</param>
+        /// <param name="appInfo">which app to launch</param>
         private void _launchAppScanner_EvtLaunchApp(object sender, AppInfo appInfo)
         {
             _appToLaunchInfo = appInfo;
@@ -322,13 +236,13 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         }
 
         /// <summary>
-        /// Quit the agent
+        /// Quit the agent after confirming with the user
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event args</param>
         private void _launchAppScanner_EvtQuit(object sender, EventArgs args)
         {
-            if (confirm("Close and exit?"))
+            if (confirm(R.GetString("CloseQ")))
             {
                 quit();
             }
@@ -368,15 +282,26 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
         /// <returns>true on yes</returns>
         private bool confirm(String prompt)
         {
-            return DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentPanel(), prompt);
+            return DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentForm(), prompt);
         }
 
         /// <summary>
-        /// Initialize
+        /// Event handler to display the alphabet scanner
         /// </summary>
-        private void initProperties()
+        /// <param name="sender">event sender</param>
+        /// <param name="eventArgs">event args</param>
+        private void launchAppScanner_EvtShowScanner(object sender, EventArgs eventArgs)
         {
-            _scannerShown = false;
+            if (_launchAppScanner != null)
+            {
+                var arg = new PanelRequestEventArgs(PanelClasses.AlphabetMinimal, WindowActivityMonitor.GetForegroundWindowInfo())
+                {
+                    TargetPanel = _launchAppScanner,
+                    RequestArg = _launchAppScanner,
+                    UseCurrentScreenAsParent = true
+                };
+                showPanel(this, arg);
+            }
         }
 
         /// <summary>
@@ -430,29 +355,35 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
             commandLine = commandLine.ToLower().Trim();
             if (commandLine.Contains("@mydocuments"))
             {
-                commandLine = commandLine.Replace("@mydocuments", Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
+                commandLine = commandLine.Replace("@mydocuments",
+                                                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
             }
             else if (commandLine.Contains("@mymusic"))
             {
-                commandLine = commandLine.Replace("@mymusic", Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
+                commandLine = commandLine.Replace("@mymusic",
+                                                    Environment.GetFolderPath(Environment.SpecialFolder.MyMusic));
             }
             else if (commandLine.Contains("@mypictures"))
             {
-                commandLine = commandLine.Replace("@mypictures", Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
+                commandLine = commandLine.Replace("@mypictures",
+                                                    Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
             }
             else if (commandLine.Contains("@myvideos"))
             {
-                commandLine = commandLine.Replace("@myvideos", Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
+                commandLine = commandLine.Replace("@myvideos",
+                                                    Environment.GetFolderPath(Environment.SpecialFolder.MyVideos));
             }
 
             return commandLine;
         }
 
         /// <summary>
-        /// Quit the agent
+        /// Quit the agent.  Close the scanner
         /// </summary>
         private void quit()
         {
+            IsClosing = true;
+            IsActive = false;
             ExitCode = CompletionCode.None;
             closeScanner();
             Close();
@@ -477,6 +408,31 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.LaunchApp
             {
                 Log.Debug(ex.ToString());
             }
+        }
+
+        /// <summary>
+        /// Gets whether this supports a custom settings dialog
+        /// </summary>
+        public override bool SupportsPreferencesDialog
+        {
+            get { return true; }
+        }
+
+        /// <summary>
+        /// Shows the preferences dialog
+        /// </summary>
+        /// <returns>true on success</returns>
+        public override bool ShowPreferencesDialog()
+        {
+            var form = new ConfigureLaunchAppSettings();
+            form.Applications = Settings.Applications.ToList();
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                Settings.Applications = form.Applications.ToArray();
+                Settings.Save();
+            }
+
+            return true;
         }
     }
 }

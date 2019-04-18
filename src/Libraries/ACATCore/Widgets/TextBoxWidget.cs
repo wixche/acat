@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TextboxWidget" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,17 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Windows.Forms;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.Widgets
 {
     /// <summary>
-    /// A wrapper widget class for any windows control that
-    /// requires fonts to be scaled as the widget is scaled up or down
+    /// A wrapper widget class a TextBox .NET control.  Scales
+    /// the font size of the control depending on the scalefactor.
     /// </summary>
     public class TextBoxWidget : ButtonWidgetBase
     {
@@ -125,7 +89,9 @@ namespace ACAT.Lib.Core.Widgets
 
             if (_fontFamily != null)
             {
-                _font = new Font(_fontFamily, widgetAttribute.FontSize, widgetAttribute.FontBold ? FontStyle.Bold : FontStyle.Regular);
+                _font = new Font(_fontFamily,
+                                    widgetAttribute.FontSize, widgetAttribute
+                                    .FontBold ? FontStyle.Bold : FontStyle.Regular);
                 UIControl.Font = _font;
             }
 
@@ -133,7 +99,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Dispose resources
+        /// Disposes resources
         /// </summary>
         /// <param name="disposing">true to dispose managed resources</param>
         protected override void Dispose(bool disposing)
@@ -163,7 +129,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Release resources
+        /// Releases resources
         /// </summary>
         private void unInit()
         {

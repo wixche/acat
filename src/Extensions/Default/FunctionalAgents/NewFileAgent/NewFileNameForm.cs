@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="NewFileNameForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,60 +18,35 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.IO;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.ThemeManagement;
 using ACAT.Lib.Core.Utility;
+using System;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
+namespace ACAT.Extensions.Default.FunctionalAgents.NewFile
 {
     /// <summary>
     /// Form that lets the user enter a file name for a new
     /// file. As the user is entering characters, it checks
-    /// if the file exists and visually indicates that the
-    /// file exists.
+    /// if the file exists and visually indicates whether the
+    /// file exists or not.
     /// </summary>
     public partial class NewFileNameForm : Form
     {
+        /// <summary>
+        /// Aspect ratio of form at design time
+        /// </summary>
+        private float _designTimeAspectRatio = 0.0f;
+
+        /// <summary>
+        /// Has first call to OnClientSizeChanged been made?
+        /// </summary>
+        private bool _firstClientChangedCall = true;
+
         /// <summary>
         /// Is the filename entered a valid one?
         /// </summary>
@@ -88,17 +63,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
         public NewFileNameForm()
         {
             InitializeComponent();
+
             CreateFileType = FileType.Text;
             FileToCreate = String.Empty;
 
             Load += NewFileNameForm_Load;
             FormClosing += NewFileNameForm_FormClosing;
             Context.AppPanelManager.EvtScannerShow += AppPanelManager_EvtScannerShow;
+            Windows.EvtWindowPositionChanged += Windows_EvtWindowPositionChanged;
             textBoxFileName.KeyPress += textBoxFileName_KeyPress;
 
             var colorScheme = ThemeManager.Instance.ActiveTheme.Colors.GetColorScheme(ColorSchemes.ScannerSchemeName);
             BackColor = colorScheme.Background;
             ForeColor = colorScheme.Foreground;
+            Text = R.GetString("CreateNewFile");
         }
 
         /// <summary>
@@ -167,7 +145,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
         {
             try
             {
-                var fileName = (!String.IsNullOrEmpty(FileToCreate)) ? Path.GetFileName(FileToCreate) : String.Empty;
+                var fileName = (!String.IsNullOrEmpty(FileToCreate)) ?
+                                    Path.GetFileName(FileToCreate) :
+                                    String.Empty;
 
                 return _isValid &&
                         !String.IsNullOrEmpty(FileToCreate) &&
@@ -178,6 +158,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
             {
                 Log.Exception(ex);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Client size changed
+        /// </summary>
+        /// <param name="e">event args</param>
+        protected override void OnClientSizeChanged(EventArgs e)
+        {
+            base.OnClientSizeChanged(e);
+            if (_firstClientChangedCall)
+            {
+                _designTimeAspectRatio = (float)Height / Width;
+                _firstClientChangedCall = false;
             }
         }
 
@@ -203,7 +197,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
         {
             if (scanner is IScannerPanel)
             {
-                Windows.DockWithScanner(this, scanner, Context.AppWindowPosition);
+                if (((IPanel)scanner).PanelCommon.DisplayMode != DisplayModeTypes.Popup)
+                {
+                    Windows.DockWithScanner(this, scanner, Context.AppWindowPosition);
+                }
             }
         }
 
@@ -230,7 +227,8 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
                 _windowActiveWatchdog.Dispose();
             }
 
-            Context.AppPanelManager.EvtScannerShow -= new ScannerShow(AppPanelManager_EvtScannerShow);
+            Context.AppPanelManager.EvtScannerShow -= AppPanelManager_EvtScannerShow;
+            Windows.EvtWindowPositionChanged -= Windows_EvtWindowPositionChanged;
         }
 
         /// <summary>
@@ -240,9 +238,20 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
         /// <param name="e">event args</param>
         private void NewFileNameForm_Load(object sender, EventArgs e)
         {
+            float currentAspectRatio = (float)ClientSize.Height / ClientSize.Width;
+
+            if (_designTimeAspectRatio != 0.0f && currentAspectRatio != _designTimeAspectRatio)
+            {
+                ClientSize = new Size(ClientSize.Width, (int)(_designTimeAspectRatio * ClientSize.Width));
+            }
+
+            label1.Text = R.GetString(label1.Text);
+            label2.Text = R.GetString(label2.Text);
+            toolStripStatusLabel1.Text = R.GetString(this.toolStripStatusLabel1.Text);
             _windowActiveWatchdog = new WindowActiveWatchdog(this);
+
             Shown += NewFileNameForm_Shown;
-            textBoxFileName.TextChanged += new EventHandler(textBoxFileName_TextChanged);
+            textBoxFileName.TextChanged += textBoxFileName_TextChanged;
         }
 
         /// <summary>
@@ -252,7 +261,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
         /// <param name="e">event args</param>
         private void NewFileNameForm_Shown(object sender, EventArgs e)
         {
-            Windows.SetForegroundWindow(this.Handle);
+            Windows.SetForegroundWindow(Handle);
             Windows.ClickOnWindow(this);
         }
 
@@ -353,7 +362,21 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.NewFile
             FileToCreate = !FileExists ? Path.Combine(CreateFileDirectory, displayFileName) : String.Empty;
             Log.Debug("File: " + FileToCreate);
             labelNameOfFile.ForeColor = FileExists ? Color.Red : Color.Green;
-            Windows.SetText(labelPrompt, FileExists ? "File already exists" : String.Empty);
+            Windows.SetText(labelPrompt, FileExists ? R.GetString("FileAlreadyExists") : String.Empty);
+        }
+
+        /// <summary>
+        /// Position of the scanner changed.  If there is a companion
+        /// scanner, dock to it
+        /// </summary>
+        /// <param name="form">the form</param>
+        /// <param name="position">its position</param>
+        private void Windows_EvtWindowPositionChanged(Form form, Windows.WindowPosition position)
+        {
+            if (form != this)
+            {
+                dockToScanner(form);
+            }
         }
     }
 }

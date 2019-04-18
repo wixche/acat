@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ITextController.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,44 +18,8 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.AbbreviationsManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -92,6 +56,13 @@ namespace ACAT.Lib.Core.PanelManagement
         void DeletePreviousWord();
 
         /// <summary>
+        /// Smart deletes the previous word.  For eg, if the
+        /// last action was autocomplete word, should restore
+        /// the previously entered partial word
+        /// </summary>
+        void SmartDeletePrevWord();
+
+        /// <summary>
         /// Perform spell check on the last word entered.
         /// Invoked when an word is auto-completed or a whitespace
         /// character is inserted indicated the completion of
@@ -100,10 +71,9 @@ namespace ACAT.Lib.Core.PanelManagement
         void SpellCheck();
 
         /// <summary>
-        /// Undoes the last editing action.  For eg, if the
-        /// last action was autocomplete word, should restore
-        /// the previously entered partial word
+        /// Undoes the last edit change - auto-complete word,
+        /// insert punctuation, type a letter etc.
         /// </summary>
-        void UndoLastAction();
+        void UndoLastEditChange();
     }
 }

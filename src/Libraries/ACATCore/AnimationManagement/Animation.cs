@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Animation.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text.RegularExpressions;
-using System.Xml;
 using ACAT.Lib.Core.Interpreter;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace ACAT.Lib.Core.AnimationManagement
 {
@@ -69,18 +33,12 @@ namespace ACAT.Lib.Core.AnimationManagement
     /// Represents a single animation sequence.
     ///
     /// The hierarchy is as follows
-    ///     AnimationsCollection (collection of animations indexed by screen name)
-    ///        Animations  (collection of animations for a screen)
+    ///     AnimationsCollection (collection of animations indexed by panel name)
+    ///        Animations  (collection of animations for a panel)
     ///           Animation  (a single animation)
     /// </summary>
     public class Animation : IDisposable
     {
-        /// <summary>
-        /// Code to execute when the user hits the back button at any
-        /// point during this animation sequence
-        /// </summary>
-        public PCode OnBack;
-
         /// <summary>
         /// Code to execute when the animation sequence ends without the
         /// user having selected anything during the sequence
@@ -113,12 +71,12 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <summary>
         /// String representation of hesitate time as read from the XML file
         /// </summary>
-        private string _hesitateTimeVariableName;
+        private string _hesitateTimeVariableName = String.Empty;
 
         /// <summary>
         /// String representation of stepping time as read from the XML file
         /// </summary>
-        private string _steppingTimeVariableName;
+        private string _steppingTimeVariableName = string.Empty;
 
         /// <summary>
         /// The xml node list from the config file that contains
@@ -137,12 +95,11 @@ namespace ACAT.Lib.Core.AnimationManagement
             Iterations = "1";
             OnEnterExecutionNotDone = false;
             AnimationWidgetList = new List<AnimationWidget>();
-            OnBack = new PCode();
             OnEnd = new PCode();
             OnSelect = new PCode();
             OnEnter = new PCode();
-            SteppingTime = CoreGlobals.AppPreferences.SteppingTime;
-            HesitateTime = CoreGlobals.AppPreferences.HesitateTime;
+            SteppingTime = CoreGlobals.AppPreferences.ScanTime;
+            HesitateTime = CoreGlobals.AppPreferences.FirstPauseTime;
             CoreGlobals.AppPreferences.EvtPreferencesChanged += AppPreferences_EvtPreferencesChanged;
         }
 
@@ -255,9 +212,6 @@ namespace ACAT.Lib.Core.AnimationManagement
             IsFirst = XmlUtils.GetXMLAttrBool(xmlNode, "start", false);
             AutoStart = !IsFirst || XmlUtils.GetXMLAttrBool(xmlNode, "autoStart", true);
 
-            var onBack = XmlUtils.GetXMLAttrString(xmlNode, "onBack");
-            _parser.Parse(onBack, ref OnBack);
-
             var onEnd = XmlUtils.GetXMLAttrString(xmlNode, "onEnd");
             _parser.Parse(onEnd, ref OnEnd);
 
@@ -269,13 +223,15 @@ namespace ACAT.Lib.Core.AnimationManagement
 
             Iterations = XmlUtils.GetXMLAttrString(xmlNode, "iterations");
 
-            _hesitateTimeVariableName = XmlUtils.GetXMLAttrString(xmlNode, "hesitateTime");
+            _hesitateTimeVariableName = XmlUtils.GetXMLAttrString(xmlNode, "firstPauseTime");
+
             HesitateTime = CoreGlobals.AppPreferences.ResolveVariableInt(_hesitateTimeVariableName, 0, 0);
 
-            _steppingTimeVariableName = XmlUtils.GetXMLAttrString(xmlNode, "steppingTime");
+            _steppingTimeVariableName = XmlUtils.GetXMLAttrString(xmlNode, "scanTime");
+
             SteppingTime = CoreGlobals.AppPreferences.ResolveVariableInt(_steppingTimeVariableName,
-                                                                CoreGlobals.AppPreferences.SteppingTime,
-                                                                CoreGlobals.AppPreferences.SteppingTime);
+                                                                CoreGlobals.AppPreferences.ScanTime,
+                                                                CoreGlobals.AppPreferences.ScanTime);
 
             _widgetXMLNodeList = xmlNode.SelectNodes("Widget");
         }
@@ -341,8 +297,8 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             HesitateTime = CoreGlobals.AppPreferences.ResolveVariableInt(_hesitateTimeVariableName, 0, 0);
             SteppingTime = CoreGlobals.AppPreferences.ResolveVariableInt(_steppingTimeVariableName,
-                                                                CoreGlobals.AppPreferences.SteppingTime,
-                                                                CoreGlobals.AppPreferences.SteppingTime);
+                                                                CoreGlobals.AppPreferences.ScanTime,
+                                                                CoreGlobals.AppPreferences.ScanTime);
         }
 
         /// <summary>
@@ -488,7 +444,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 Log.Debug("Resolved name : " + widgetName);
 
                 var uiWidget = rootWidget.Finder.FindChild(widgetName);
-                if (uiWidget != null)
+                if (uiWidget != null && (uiWidget.UIControl == null || uiWidget.Visible))
                 {
                     Log.Debug("Found child name : " + widgetName);
                     var animationWidget = createAndAddAnimationWidget(uiWidget);
@@ -535,11 +491,14 @@ namespace ACAT.Lib.Core.AnimationManagement
 
                     foreach (var childWidget in containerWidget.Children)
                     {
-                        Log.Debug("Found child name : " + childWidget.Name);
-                        var animationWidget = createAndAddAnimationWidget(childWidget);
-                        if (animationWidget != null)
-                        {
-                            animationWidget.Load(xmlNode);
+                        if (childWidget.UIControl == null || childWidget.Visible)
+                        { 
+                            Log.Debug("Found child name : " + childWidget.Name);
+                            var animationWidget = createAndAddAnimationWidget(childWidget);
+                            if (animationWidget != null)
+                            {
+                                animationWidget.Load(xmlNode);
+                            }
                         }
                     }
                 }

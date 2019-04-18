@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="IApplicationAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,47 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
 
 namespace ACAT.Lib.Core.AgentManagement
 {
@@ -74,7 +39,7 @@ namespace ACAT.Lib.Core.AgentManagement
     /// All application agents must derive from this interface.  Application agents
     /// handle all interactions with an application, such as notepad, ms word, ie etc.
     /// </summary>
-    public interface IApplicationAgent : IDisposable, IExtension
+    public interface IApplicationAgent : IDisposable, IExtension, ISupportsPreferences
     {
         /// <summary>
         /// Raised when an application agent is deactivated
@@ -92,11 +57,6 @@ namespace ACAT.Lib.Core.AgentManagement
         /// application window.
         /// </summary>
         event TextChangedDelegate EvtTextChanged;
-
-        /// <summary>
-        /// Returns the ACAT descriptor for the agent
-        /// </summary>
-        IDescriptor Descriptor { get; }
 
         /// <summary>
         /// Gets or sets the name of the agent
@@ -120,13 +80,13 @@ namespace ACAT.Lib.Core.AgentManagement
         ITextControlAgent TextControlAgent { get; }
 
         /// <summary>
-        /// Check to see if a widget (a button on the scanner) should be
+        /// Check to see if a command should be
         /// enabled or not. This depends on the context.   The arg parameter
-        /// contains the widget object in question.  For instance, if the
+        /// contains the widget/command object in question.  For instance, if the
         /// talk window is empty, the "Clear talk window" button should be disabled.
         /// </summary>
         /// <param name="arg">Argument</param>
-        void CheckWidgetEnabled(CheckEnabledArgs arg);
+        void CheckCommandEnabled(CommandEnabledArg arg);
 
         /// <summary>
         /// Invoked when there is a request to display a contexutal menu for

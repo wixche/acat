@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AutoPostionScanner.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,19 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.InputActuators;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
+using ACAT.ACATResources;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// Repositions the scanner to one of the four corners
-    /// on a timer tick.  This allows the user to easily select
+    /// Repositions the scanner to one of the pre-defined spots on
+    /// the display.  The position is changed on on a timer tick.
+    /// This allows the user to easily select
     /// the preferred scanner position.  Timer stops either by
     /// a mouse click or by an actuation switch trigger
     /// </summary>
@@ -102,7 +68,7 @@ namespace ACAT.Lib.Core.PanelManagement
         public AutoPositionScanner(Form form)
         {
             _form = form;
-            _timer = new Timer { Interval = CoreGlobals.AppPreferences.TabScanTime };
+            _timer = new Timer { Interval = CoreGlobals.AppPreferences.MenuDialogScanTime };
             _timer.Tick += _timer_Tick;
         }
 
@@ -124,7 +90,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Is the timer running?
+        /// Returns true if timer is running?
         /// </summary>
         /// <returns>true if it is</returns>
         public bool IsRunning()
@@ -138,9 +104,9 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Start()
         {
-            _form.Invoke(new MethodInvoker(delegate()
+            _form.Invoke(new MethodInvoker(delegate
             {
-                _toastForm = new ToastForm("Click to stop", -1);
+                _toastForm = new ToastForm(R.GetString("TriggerToStop"), -1);
                 Windows.SetWindowPosition(_toastForm, Windows.WindowPosition.CenterScreen);
                 _toastForm.Show();
 
@@ -157,7 +123,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Stop()
         {
-            _form.Invoke(new MethodInvoker(delegate()
+            _form.Invoke(new MethodInvoker(delegate
             {
                 if (_timer.Enabled)
                 {
@@ -196,7 +162,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Timer tick function. Position the scanner at
+        /// Timer tick function. Positions the scanner at
         /// the next corner
         /// </summary>
         /// <param name="sender">event sender</param>
@@ -210,19 +176,27 @@ namespace ACAT.Lib.Core.PanelManagement
                 switch (Context.AppWindowPosition)
                 {
                     case Windows.WindowPosition.TopRight:
+                        nextPosition = Windows.WindowPosition.MiddleRight;
+                        break;
+
+                    case Windows.WindowPosition.MiddleRight:
                         nextPosition = Windows.WindowPosition.BottomRight;
-                        break;
-
-                    case Windows.WindowPosition.TopLeft:
-                        nextPosition = Windows.WindowPosition.TopRight;
-                        break;
-
-                    case Windows.WindowPosition.BottomLeft:
-                        nextPosition = Windows.WindowPosition.TopLeft;
                         break;
 
                     case Windows.WindowPosition.BottomRight:
                         nextPosition = Windows.WindowPosition.BottomLeft;
+                        break;
+
+                    case Windows.WindowPosition.BottomLeft:
+                        nextPosition = Windows.WindowPosition.MiddleLeft;
+                        break;
+
+                    case Windows.WindowPosition.MiddleLeft:
+                        nextPosition = Windows.WindowPosition.TopLeft;
+                        break;
+
+                    case Windows.WindowPosition.TopLeft:
+                        nextPosition = Windows.WindowPosition.TopRight;
                         break;
                 }
 
@@ -231,7 +205,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// An actuator switch trigger event was detected.  Stop
+        /// An actuator switch trigger event was detected.  Stops
         /// the timer
         /// </summary>
         /// <param name="switchObj">switch that actuated</param>
@@ -251,7 +225,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// A mouse click was detected.  Stop the timer
+        /// A mouse click was detected.  Stops the timer
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="mouseEventArgs">event args</param>

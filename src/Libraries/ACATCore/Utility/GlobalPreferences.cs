@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="GlobalPreferences.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,70 +19,23 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Xml.Serialization;
 
 namespace ACAT.Lib.Core.Utility
 {
     /// <summary>
     /// Contains global settings for ACAT. These are
-    /// separate from the User specific settings
+    /// separate from the User specific settings.  The settings
+    /// file is stored in the same directory as the application.
     /// </summary>
     [Serializable]
     public class GlobalPreferences
     {
-        /// <summary>
-        /// Factory default settings file
-        /// </summary>
-        [NonSerialized]
-        public static String DefaultsFileName = "DefaultSettings.xml";
+        [NonSerialized, XmlIgnore]
+        public static String DefaultPreferencesFilePath = String.Empty;
 
-        /// <summary>
-        /// Current global settings file
-        /// </summary>
-        [NonSerialized]
-        public static String FileName = "Settings.xml";
-
-        /// <summary>
-        /// Path where this file is stored
-        /// </summary>
-        [NonSerialized]
-        public static String SettingsDefaultPath = FileUtils.GetPreferencesFileFullPath(DefaultsFileName);
-
+        [NonSerialized, XmlIgnore]
+        public static String PreferencesFilePath = String.Empty;
         /// <summary>
         /// Default profile for the user
         /// </summary>
@@ -91,7 +44,7 @@ namespace ACAT.Lib.Core.Utility
         /// <summary>
         /// Default user name
         /// </summary>
-        public String CurrentUser = "Default";
+        public String CurrentUser = "DefaultUser";
 
         /// <summary>
         /// Read preferences from the specified file.  If the file
@@ -103,11 +56,9 @@ namespace ACAT.Lib.Core.Utility
         /// <returns>Preferences read or null</returns>
         public static GlobalPreferences Load(String prefFile, bool loadDefaultsOnFail = true)
         {
-            GlobalPreferences retVal;
-
             saveFactoryDefaultSettings();
 
-            retVal = XmlUtils.XmlFileLoad<GlobalPreferences>(prefFile);
+            var retVal = XmlUtils.XmlFileLoad<GlobalPreferences>(prefFile);
 
             if (retVal == null)
             {
@@ -132,6 +83,27 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Loads the settings from the preferences path
+        /// </summary>
+        /// <param name="loadDefaultsOnFail">set to true to load default settings on error</param>
+        /// <returns></returns>
+        public static GlobalPreferences Load(bool loadDefaultsOnFail = true)
+        {
+            return !String.IsNullOrEmpty(PreferencesFilePath) ?
+                    Load(PreferencesFilePath, loadDefaultsOnFail) :
+                    LoadDefaultSettings();
+        }
+
+        /// <summary>
+        /// Loads default factory settings
+        /// </summary>
+        /// <returns>Factory default settings</returns>
+        public static GlobalPreferences LoadDefaultSettings()
+        {
+            return loadDefaults<GlobalPreferences>();
+        }
+
+        /// <summary>
         /// Saves preferenes to the specified file
         /// </summary>
         /// <param name="prefs">preferences to save</param>
@@ -151,11 +123,31 @@ namespace ACAT.Lib.Core.Utility
         }
 
         /// <summary>
+        /// Saves the settings to the preferences file
+        /// </summary>
+        /// <returns>true on success</returns>
+        public bool Save()
+        {
+            return !String.IsNullOrEmpty(PreferencesFilePath) && Save(this, PreferencesFilePath);
+        }
+
+        /// <summary>
+        /// Creates a new instance of the class (which has the
+        /// default settings)
+        /// </summary>
+        /// <typeparam name="T">Class</typeparam>
+        /// <returns>created object</returns>
+        private static T loadDefaults<T>() where T : new()
+        {
+            return new T();
+        }
+
+        /// <summary>
         /// Save factory default settings
         /// </summary>
         private static void saveFactoryDefaultSettings()
         {
-            Save(new GlobalPreferences(), SettingsDefaultPath);
+            Save(new GlobalPreferences(), DefaultPreferencesFilePath);
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WordPadAgentBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,15 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.AppAgents.Wordpad
 {
@@ -79,25 +44,30 @@ namespace ACAT.Lib.Extension.AppAgents.Wordpad
         protected bool autoSwitchScanners = true;
 
         /// <summary>
-        /// Title of the contextual menu
+        /// Snap window to alphabet scanner
         /// </summary>
-        private const String ContextMenuTitle = "WordPad";
+        protected bool snapWindowDockAlphabetScanner;
 
         /// <summary>
         /// Name of the WordPad process
         /// </summary>
         private const String WordPadProcessName = "wordpad";
 
-        private readonly String[] _supportedFeatures =
+        private readonly String[] _supportedCommands =
         {
             "NewFile",
             "OpenFile",
             "SaveFile",
             "SaveFileAs",
-            "Find",
-            "ContextualMenu",
-            "SwitchAppWindow"
+            "CmdFind",
+            "CmdContextMenu",
+            "CmdSwitchApps"
         };
+
+        /// <summary>
+        /// Title of the contextual menu
+        /// </summary>
+        private readonly String ContextMenuTitle = R.GetString("WordPad");
 
         /// <summary>
         /// Word prediction context handle used to add contents
@@ -118,9 +88,9 @@ namespace ACAT.Lib.Extension.AppAgents.Wordpad
         /// will depend on the current context.
         /// </summary>
         /// <param name="arg">contains info about the widget</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            checkWidgetEnabled(_supportedFeatures, arg);
+            checkCommandEnabled(_supportedCommands, arg);
         }
 
         /// <summary>
@@ -197,24 +167,30 @@ namespace ACAT.Lib.Extension.AppAgents.Wordpad
                         if (String.IsNullOrEmpty(text.Trim()))
                         {
                             DialogUtils.ShowTimedDialog(PanelManager.Instance.GetCurrentPanel() as Form,
-                                                        "Lecture Manager", "Document is empty");
+                                                        R.GetString("LectureManager"), R.GetString("DocumentIsEmpty"));
                             break;
                         }
 
-                        if (DialogUtils.ConfirmScanner("Load this document into Lecture Manager?"))
+                        if (DialogUtils.ConfirmScanner(R.GetString("LoadThisDocIntoLM")))
                         {
 #pragma warning disable 4014
                             launchLectureManager();
 #pragma warning restore 4014
-
                         }
                     }
 
                     break;
 
-                case "CmdThreeFourthMaximizeWindow":
-                    Windows.SetForegroundWindowSizePercent(Context.AppWindowPosition,
-                                                    Common.AppPreferences.WindowMaximizeSizePercent);
+                case "CmdSnapMaxDockWindowToggle":
+                    if (snapWindowDockAlphabetScanner)
+                    {
+                        Windows.ToggleForegroundWindowMaximizeDock(Context.AppPanelManager.GetCurrentForm() as Form,
+                            Context.AppWindowPosition, true);
+                    }
+                    else
+                    {
+                        Windows.ToggleSnapForegroundWindow(Context.AppWindowPosition, Common.AppPreferences.WindowSnapSizePercent);
+                    }
                     break;
 
                 default:
@@ -235,8 +211,8 @@ namespace ACAT.Lib.Extension.AppAgents.Wordpad
         /// Displays scanner according to the window element in the
         /// WordPad window that currently has focus
         /// </summary>
-        /// <param name="monitorInfo"></param>
-        /// <param name="handled"></param>
+        /// <param name="monitorInfo">Info about currently focused element</param>
+        /// <param name="handled">true if handled</param>
         private void displayScanner(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
             String panel;
@@ -291,7 +267,7 @@ namespace ACAT.Lib.Extension.AppAgents.Wordpad
         /// <returns>task</returns>
         private async Task launchLectureManager()
         {
-            IApplicationAgent agent = Context.AppAgentMgr.GetAgentByName("Lecture Manager Agent");
+            IApplicationAgent agent = Context.AppAgentMgr.GetAgentByCategory("LectureManagerAgent");
             if (agent != null)
             {
                 IExtension extension = agent;

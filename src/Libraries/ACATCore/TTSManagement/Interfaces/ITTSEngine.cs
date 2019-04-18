@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ITTSEngine.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Extensions;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using ACAT.Lib.Core.Extensions;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Globalization;
 
 namespace ACAT.Lib.Core.TTSManagement
 {
@@ -122,7 +86,8 @@ namespace ACAT.Lib.Core.TTSManagement
     }
 
     /// <summary>
-    /// Interface for the TTS Engine.
+    /// Interface for the TTS Engine.  All TTS Engines must implement
+    /// this interface.
     /// </summary>
     public interface ITTSEngine : IDisposable, IExtension
     {
@@ -147,20 +112,14 @@ namespace ACAT.Lib.Core.TTSManagement
         event TTSVoiceChanged EvtVoiceChanged;
 
         /// <summary>
-        /// Gets the descriptor for the TTS engine
+        /// Gets or sets the culture info for the voice to use
         /// </summary>
-        IDescriptor Descriptor { get; }
+        CultureInfo Culture { get; set; }
 
         /// <summary>
         /// Gets the current status of the speech engine
         /// </summary>
         StatusFlags Status { get; }
-
-        /// <summary>
-        /// Gets whether TTS engine has a dialog to allow the
-        /// user to change settings
-        /// </summary>
-        bool SupportsSettingsDialog { get; }
 
         /// <summary>
         /// Gets or sets the voice to use
@@ -179,12 +138,6 @@ namespace ACAT.Lib.Core.TTSManagement
         TTSValue GetRate();
 
         /// <summary>
-        /// Gets the settings dialog
-        /// </summary>
-        /// <returns></returns>
-        ITTSSettingsDialog GetSettingsDialog();
-
-        /// <summary>
         /// Returns a list of voices supported by the speech engine
         /// </summary>
         /// <returns>List of names of vlices</returns>
@@ -199,7 +152,7 @@ namespace ACAT.Lib.Core.TTSManagement
         /// Initializes the speech engine
         /// </summary>
         /// <returns></returns>
-        bool Init();
+        bool Init(CultureInfo ci);
 
         /// <summary>
         /// Indicates whether the engine is muted

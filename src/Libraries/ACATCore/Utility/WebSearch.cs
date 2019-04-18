@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WebSearch.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,51 +20,16 @@
 
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Permissions;
 using System.Text;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
     /// <summary>
     /// Performs a google or a wiki search on a search
-    /// string.  Launchesthe preferred browser and shows the
-    /// result of the search
+    /// string.  Launches the preferred browser and shows the
+    /// result of the search. If no browser is specified,
+    /// Internet Explorer is assumed as the default
     /// </summary>
     public class WebSearch
     {
@@ -81,7 +46,8 @@ namespace ACAT.Lib.Core.Utility
         /// <summary>
         /// URL to do a wiki search
         /// </summary>
-        private const String WikiSearchUrl = "http://www.google.com/search?btnI=I%27m+Feeling+Lucky&ie=UTF-8&oe=UTF-8&q=";
+        private const String WikiSearchUrl =
+            "http://www.google.com/search?btnI=I%27m+Feeling+Lucky&ie=UTF-8&oe=UTF-8&q=";
 
         /// <summary>
         /// Which brwoser to use.  Path to the
@@ -99,7 +65,7 @@ namespace ACAT.Lib.Core.Utility
         /// <param name="preferredBrowser">which browser to use (eg IExplore.exe)</param>
         public WebSearch(String preferredBrowser)
         {
-            _preferredBrowser = String.IsNullOrEmpty(preferredBrowser.Trim()) ? "IExplore.exe" : preferredBrowser;
+            _preferredBrowser = (preferredBrowser != null) ? preferredBrowser.Trim() : String.Empty;
         }
 
         /// <summary>
@@ -116,7 +82,7 @@ namespace ACAT.Lib.Core.Utility
             if (!String.IsNullOrEmpty(query))
             {
                 var url = SearchUrl + query;
-                retVal = Process.Start(_preferredBrowser, url);
+                retVal = launchURL(url);
             }
 
             return retVal;
@@ -136,7 +102,7 @@ namespace ACAT.Lib.Core.Utility
             if (!String.IsNullOrEmpty(query))
             {
                 var url = QuickSearchUrl + query + " -site:wikipedia.org";
-                retVal = Process.Start(_preferredBrowser, url);
+                retVal = launchURL(url);
             }
 
             return retVal;
@@ -155,10 +121,42 @@ namespace ACAT.Lib.Core.Utility
             if (!String.IsNullOrEmpty(searchTerm))
             {
                 String url = WikiSearchUrl + searchTerm + " site:wikipedia.org";
-                retVal = Process.Start(_preferredBrowser, url);
+                retVal = launchURL(url);
             }
 
             return retVal;
+        }
+
+        /// <summary>
+        /// Launches the url in the preferred browser or default
+        /// browser
+        /// </summary>
+        /// <param name="url">url to launch</param>
+        private Process launchURL(String url)
+        {
+            Process process = null;
+
+            try
+            {
+                process = String.IsNullOrEmpty(_preferredBrowser)
+                    ? Process.Start(url)
+                    : Process.Start(_preferredBrowser, url);
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could not launch URL using preferred browser.  Trying Internet Explorer. " + ex);
+
+                try
+                {
+                    process = Process.Start("IExplore.exe", url);
+                }
+                catch (Exception ex1)
+                {
+                    Log.Debug("Could not launch URL using IE. " + ex1);
+                }
+            }
+
+            return process;
         }
 
         /// <summary>

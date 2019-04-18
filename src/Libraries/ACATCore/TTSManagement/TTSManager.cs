@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TTSManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,57 +18,30 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.PanelManagement;
+using ACAT.Lib.Core.PreferencesManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Globalization;
+using System.Linq;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.TTSManagement
 {
     /// <summary>
     /// Manages text to speech (TTS) engines.  There are a variety
-    /// of methods to convert TTS.  Some are hardware solutions (SpeechPlus)
-    /// and some are software (SAPI).  ACAT supports a
-    /// variety of TTS engine to be used through the ITTSEngine interface.
-    /// The specifics of doing the conversion is up to the developer of the
+    /// of methods to convert TTS.  Some are hardware solutions where
+    /// the speech conversion is done by external hardware.
+    /// and some are software (such as the Microsof Speech Engine).
+    /// ACAT supports a variety of TTS engine to be used through the
+    /// ITTSEngine interface. The specifics of doing the conversion is up
+    /// to the developer of the
     /// engine.
     /// The TTS manager holds a list of engines that it finds and also
     /// tracks the currently active TTS engine
+    ///
     /// This class is a singleton.
     /// </summary>
     public class TTSManager : IDisposable
@@ -96,12 +69,6 @@ namespace ACAT.Lib.Core.TTSManagement
         private static readonly TTSManager _instance = new TTSManager();
 
         /// <summary>
-        /// A null TTS engine.  This is a barebones class and doesn't
-        /// actually do any TTS conversions.
-        /// </summary>
-        private readonly ITTSEngine _nullEngine;
-
-        /// <summary>
         /// Has this object been disposed
         /// </summary>
         private bool _disposed;
@@ -116,9 +83,8 @@ namespace ACAT.Lib.Core.TTSManagement
         /// </summary>
         private TTSManager()
         {
-            _nullEngine = new Core.TTSEngines.NullEngine();
-            ActiveEngine = _nullEngine;
-            ActiveEngine.Init();
+            ActiveEngine = TTSEngines.NullTTSEngine;
+            Context.EvtCultureChanged += Context_EvtCultureChanged;
         }
 
         /// <summary>
@@ -159,6 +125,14 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
+        /// Returns the collection of discovered TTS Engine Types
+        /// </summary>
+        public ICollection<Type> GetExtensions()
+        {
+            return _ttsEngines.Collection;
+        }
+
+        /// <summary>
         /// Returns the current normalized volume
         /// </summary>
         /// <returns>volume level</returns>
@@ -183,11 +157,20 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
-        /// XML file and creates a list of TTSEngines from it.  The
-        /// extension dirs parameter contains the root directory under
+        /// Initializes the TTS manager
+        /// </summary>
+        /// <param name="extensionDirs">Directories to search</param>
+        /// <returns>true on success</returns>
+        public bool Init(IEnumerable<String> extensionDirs)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// The extension dirs parameter contains the root directory under
         /// which to search for TTSEngine DLL files.  The directories
         /// are specified in a comma delimited fashion.
-        /// E.g.  Base, Hawking
+        /// E.g.  Default, MyCustomACATDir
         /// These are relative to the application execution directory or
         /// to the directory where ACAT has been installed.
         /// It recusrively walks the directories and looks for TTS Engine
@@ -195,13 +178,14 @@ namespace ACAT.Lib.Core.TTSManagement
         /// </summary>
         /// <param name="extensionDirs">Directories to search</param>
         /// <returns>true on success</returns>
-        public bool Init(IEnumerable<String> extensionDirs)
+        public bool LoadExtensions(IEnumerable<String> extensionDirs)
         {
             bool retVal = true;
 
             if (_ttsEngines == null)
             {
                 _ttsEngines = new TTSEngines();
+
                 retVal = _ttsEngines.Load(extensionDirs);
             }
 
@@ -209,52 +193,62 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
-        /// Sets the Active TTS engine identified by the specified
-        /// GUID or name
+        /// Sets the active spellchecker for the specified culture.  If
+        /// culture is null, the default culture is used
         /// </summary>
-        /// <param name="idOrName">name or ID of the engine</param>
+        /// <param name="ci">culture info</param>
         /// <returns>true on success</returns>
-        public bool SetActiveEngine(String idOrName)
+        public bool SetActiveEngine(CultureInfo ci = null)
         {
-            Guid guid;
+            bool retVal = true;
+            Guid guid = Guid.Empty;
+            Guid cultureNeutralGuid = Guid.Empty;
 
-            if (!Guid.TryParse(idOrName, out guid))
+            if (ci == null)
             {
-                guid = _ttsEngines.GetByName(idOrName);
+                ci = CultureInfo.DefaultThreadCurrentUICulture;
             }
 
-            return (guid != Guid.Empty) && SetActiveEngine(guid);
-        }
+            guid = _ttsEngines.GetPreferredOrDefaultByCulture(ci);
+            cultureNeutralGuid = _ttsEngines.GetPreferredOrDefaultByCulture(null);
 
-        /// <summary>
-        /// Sets the Active TTS engine identified by the GUID id
-        /// </summary>
-        /// <param name="id">GUID of the engine</param>
-        /// <returns>true on success</returns>
-        public bool SetActiveEngine(Guid id)
-        {
-            bool retVal;
-            var type = _ttsEngines[id];
-
-            if (type != null)
+            if (!Equals(guid, Guid.Empty))  // found something for the specific culture
             {
-                var oldEngine = ActiveEngine;
+                var type = _ttsEngines.Lookup(guid);
 
-                retVal = createAndSetActiveEngine(type);
-
-                notifyEngineChanged(oldEngine, ActiveEngine);
-
-                if (oldEngine != null)
+                if (ActiveEngine != null)
                 {
-                    oldEngine.Dispose();
+                    ActiveEngine.Dispose();
+                    ActiveEngine = null;
+                }
+
+                retVal = createAndSetActiveEngine(type, ci);
+
+                if (!retVal)
+                {
+                    ActiveEngine = TTSEngines.NullTTSEngine;
+                    retVal = true; // TODO::
                 }
             }
             else
             {
-                retVal = false;
+                if (!Equals(cultureNeutralGuid, Guid.Empty))
+                {
+                    var type = _ttsEngines.Lookup(cultureNeutralGuid);
+                    retVal = createAndSetActiveEngine(type, ci);
+                }
+                else
+                {
+                    retVal = false;
+                }
+
+                if (!retVal)
+                {
+                    ActiveEngine = TTSEngines.NullTTSEngine;
+                    retVal = true; // TODO::
+                }
             }
 
-            Log.Debug("retVal=" + retVal);
             return retVal;
         }
 
@@ -280,6 +274,102 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
+        /// Displays the preferences dialog for TTS Engines.
+        /// First displays the dialog that lets the user select the
+        /// culture (language) and then displays all the TTS Engines
+        /// discovered for that culture. The user can select the
+        /// preferred Engine, change settings etc.
+        /// </summary>
+        public void ShowPreferences()
+        {
+            if (!ResourceUtils.IsInstalledCulture(CultureInfo.DefaultThreadCurrentUICulture))
+            {
+                return;
+            }
+
+            var ci = CultureInfo.DefaultThreadCurrentUICulture;
+
+            List<Type> wpTypeList = new List<Type>();
+
+            // add all the spellcheckers for the selected language
+            wpTypeList.AddRange(_ttsEngines.Get(ci.Name).ToList());
+
+            if (String.Compare(ci.Name, ci.TwoLetterISOLanguageName, true) != 0)
+            {
+                wpTypeList.AddRange(_ttsEngines.Get(ci.TwoLetterISOLanguageName).ToList());
+            }
+
+            wpTypeList.AddRange(_ttsEngines.Get(null).ToList());
+            wpTypeList.Add(typeof(NullTTSEngine));
+
+            //Now create a list of all the text-to-speech objects
+            List<object> objList = wpTypeList.Select(type => Activator.CreateInstance(type)).ToList();
+
+            var categories = objList.Select(ttsEngine => new PreferencesCategory(ttsEngine)).ToList();
+
+            var preferredGuid = _ttsEngines.GetPreferredOrDefaultByCulture(ci);
+            if (Equals(preferredGuid, Guid.Empty))
+            {
+                preferredGuid = _ttsEngines.GetPreferredOrDefaultByCulture(null);
+            }
+
+            foreach (var category in categories)
+            {
+                category.Enable = false;
+            }
+
+            foreach (var category in categories)
+            {
+                var iExtension = category.PreferenceObj as IExtension;
+                category.Enable = (iExtension != null && iExtension.Descriptor.Id == preferredGuid);
+                if (category.Enable)
+                {
+                    break;
+                }
+            }
+
+            // display the form for the user to select default word predictor,
+            // change settings etc
+            var form1 = new PreferencesCategorySelectForm
+            {
+                PreferencesCategories = categories,
+                EnableColumnHeaderText = "Default",
+                CategoryColumnHeaderText = "TTS Engine",
+                Title = "Text-to-speech - " + ci.DisplayName,
+                AllowMultiEnable = false
+            };
+
+            if (form1.ShowDialog() == DialogResult.OK)
+            {
+                foreach (var category in form1.PreferencesCategories)
+                {
+                    if (category.Enable && category.PreferenceObj is IExtension)
+                    {
+                        _ttsEngines.SetPreferred(ci.Name, ((IExtension)category.PreferenceObj).Descriptor.Id);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Switch language to the specified one.
+        /// </summary>
+        /// <param name="ci">culture to switch to</param>
+        /// <returns>true on success</returns>
+        public bool SwitchLanguage(CultureInfo ci)
+        {
+            if (ActiveEngine != null)
+            {
+                ActiveEngine.Dispose();
+                ActiveEngine = null;
+            }
+
+            bool ret = SetActiveEngine(ci);
+
+            return ret;
+        }
+
+        /// <summary>
         /// Disposer. Release resources and cleanup.
         /// </summary>
         /// <param name="disposing">true to dispose managed resources</param>
@@ -302,11 +392,6 @@ namespace ACAT.Lib.Core.TTSManagement
                     {
                         _ttsEngines.Dispose();
                     }
-
-                    if (_nullEngine != null)
-                    {
-                        _nullEngine.Dispose();
-                    }
                 }
 
                 // Release unmanaged resources.
@@ -316,35 +401,41 @@ namespace ACAT.Lib.Core.TTSManagement
         }
 
         /// <summary>
-        /// Creates a TTS engine oft he specified Type, initializes it
-        /// and sets it as the active engine.  If it could not create it,
-        /// it sets the null engine as the active engine
+        /// Culture changed. Reinitialize TTS Engine
         /// </summary>
-        /// <param name="engineType">The .NET type of the engine</param>
+        /// <param name="sender">event sender</param>
+        /// <param name="arg">event args</param>
+        private void Context_EvtCultureChanged(object sender, CultureChangedEventArg arg)
+        {
+            SwitchLanguage(arg.Culture);
+        }
+
+        /// <summary>
+        /// Creates the TTS Engine for the specified culture.  If it fails,
+        /// it set the null TTS Engine as the active one.
+        /// </summary>
+        /// <param name="type">Type of the TTS Engine</param>
+        /// <param name="ci">Culture</param>
         /// <returns>true on success</returns>
-        private bool createAndSetActiveEngine(Type engineType)
+        private bool createAndSetActiveEngine(Type type, CultureInfo ci)
         {
             bool retVal;
 
             try
             {
-                var engine = (ITTSEngine)Activator.CreateInstance(engineType);
-                retVal = engine.Init();
-                ActiveEngine = (retVal) ? engine : null;
+                var ttsEngine = (ITTSEngine)Activator.CreateInstance(type);
+                retVal = ttsEngine.Init(ci);
+                if (retVal)
+                {
+                    saveSettings(ttsEngine);
+                    ActiveEngine = ttsEngine;
+                }
             }
             catch (Exception ex)
             {
-                Log.Debug("Unable to instantiate TTS engine of type " + engineType.ToString() + ", assembly: "
-                    + engineType.Assembly.FullName + ". Exception: " + ex.ToString());
+                Log.Debug("Unable to load TTS Engine" + type + ", assembly: " + type.Assembly.FullName + ". Exception: " + ex);
                 retVal = false;
             }
-
-            if (!retVal)
-            {
-                ActiveEngine = _nullEngine;
-            }
-
-            Log.Debug("retVal=" + retVal);
 
             return retVal;
         }
@@ -360,6 +451,15 @@ namespace ACAT.Lib.Core.TTSManagement
             {
                 EvtEngineChanged(oldEngine, newEngine);
             }
+        }
+
+        /// <summary>
+        /// Saves settings for the specified tts engine
+        /// </summary>
+        /// <param name="spellChecker">TTS Engine object</param>
+        private void saveSettings(ITTSEngine ttsEngine)
+        {
+            ttsEngine.Save();
         }
     }
 }

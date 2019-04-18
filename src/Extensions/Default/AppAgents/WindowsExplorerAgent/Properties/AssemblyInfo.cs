@@ -6,13 +6,14 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("WindowsExplorerAgent")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Assistive Context-Aware Toolkit (ACAT)")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Microsoft")]
-[assembly: AssemblyProduct("WindowsExplorerAgent")]
-[assembly: AssemblyCopyright("Copyright © Microsoft 2013")]
+[assembly: AssemblyCompany("http://01.org/acat")]
+[assembly: AssemblyProduct("Assistive Context-Aware Toolkit (ACAT)")]
+[assembly: AssemblyCopyright("Licensed and distributed under the Apache License v2.0 by Intel Corporation")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
+
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 
@@ -20,7 +21,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("2912047f-2abc-4a64-b212-71ae9f3959b5")]
+[assembly: Guid("081eed90-a712-4fca-b42b-8715e3e08cc8")]
 
 // Version information for an assembly consists of the following four values:
 //

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TalkWindowBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,24 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Windows.Forms;
+using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.ThemeManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.TalkWindowManagement
 {
-    [DescriptorAttribute("97D0FFE5-88C1-4185-9DF4-8BAE3F905BAF", "TalkWindowBase", "Base class for Talk Window")]
+    /// <summary>
+    /// This is the base class for the Talk Window. Implements
+    /// the ITalkWindow interface and handles functions such as
+    /// zoomin, zoomout, getting the talk window text, clearing the
+    /// talk window, clipboard operations etc.
+    /// </summary>
+    [DescriptorAttribute("97D0FFE5-88C1-4185-9DF4-8BAE3F905BAF",
+                        "TalkWindowBase",
+                        "Base class for Talk Window")]
     public class TalkWindowBase : Form, ITalkWindow
     {
         /// <summary>
@@ -134,7 +107,6 @@ namespace ACAT.Lib.Core.TalkWindowManagement
             _syncObj = new SyncLock();
 
             Load += TalkWindowBase_Load;
-            FormClosing += TalkWindowBase_FormClosing;
         }
 
         /// <summary>
@@ -161,6 +133,11 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         /// Gets or sets the size of the font
         /// </summary>
         public virtual float FontSize { get; set; }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return null; } }
 
         /// <summary>
         /// Gets the synchronization object
@@ -237,14 +214,7 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
-        /// Gets or sets the control (typically a Label) that
-        /// displays the current date/time.  Return null if
-        /// the talk window does not have one.
-        /// </summary>
-        protected Control dateTimeControl { get; set; }
-
-        /// <summary>
-        ///  Centers the talk window in the screen
+        ///  Centers the talk window in the display
         /// </summary>
         public virtual void Center()
         {
@@ -291,7 +261,17 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
-        /// Pause the talk window
+        /// Initialzies the form
+        /// </summary>
+        /// <param name="initArg">startup args</param>
+        /// <returns>true on success</returns>
+        public virtual bool Initialize(StartupArg initArg)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// Pauses the talk window
         /// </summary>
         public virtual void OnPause()
         {
@@ -305,7 +285,7 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
-        /// Resume the talk window
+        /// Resumes the talk window
         /// </summary>
         public virtual void OnResume()
         {
@@ -393,6 +373,14 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
+        /// Override this to displays the date and time on the talk window
+        /// </summary>
+        /// <param name="text"></param>
+        protected virtual void displayDateTime(String text)
+        {
+        }
+
+        /// <summary>
         /// Raises event that font has changed
         /// </summary>
         protected virtual void notifyFontChanged()
@@ -448,6 +436,8 @@ namespace ACAT.Lib.Core.TalkWindowManagement
             Log.Debug();
 
             base.OnShown(e);
+            User32Interop.SetForegroundWindow(this.Handle);
+
             if (_talkWindowTextBox != null)
             {
                 ActiveControl = _talkWindowTextBox;
@@ -497,11 +487,6 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         /// </summary>
         protected virtual void updateDateTime(String dateFormat, string timeFormat)
         {
-            if (dateTimeControl == null)
-            {
-                return;
-            }
-
             var dateTime = String.Empty;
             try
             {
@@ -539,7 +524,7 @@ namespace ACAT.Lib.Core.TalkWindowManagement
 
             if (!String.IsNullOrEmpty(dateTime))
             {
-                Windows.SetText(dateTimeControl, dateTime);
+                displayDateTime(dateTime);
             }
         }
 
@@ -579,15 +564,6 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
-        /// Form is closing.
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void TalkWindowBase_FormClosing(object sender, FormClosingEventArgs e)
-        {
-        }
-
-        /// <summary>
         /// Perform initialization
         /// </summary>
         /// <param name="sender">event sender</param>
@@ -602,7 +578,7 @@ namespace ACAT.Lib.Core.TalkWindowManagement
         }
 
         /// <summary>
-        /// Handle shortcuts.
+        /// Handles shortcuts.
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event args</param>

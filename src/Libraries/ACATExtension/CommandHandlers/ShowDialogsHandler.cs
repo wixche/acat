@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ShowDialogsHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,54 +18,20 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Reflection;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
     /// <summary>
     /// Shows the various settings dialogs such as General,
-    /// Scan, Voice etc.
+    /// Scan, Text-to-speech, Mouse etc.  These dialogs enable
+    /// the user to configure ACAT.
     /// </summary>
     public class ShowDialogsHandler : RunCommandHandler
     {
@@ -103,23 +69,19 @@ namespace ACAT.Lib.Extension.CommandHandlers
                     showDialog("WordPredictionSettingsForm");
                     break;
 
-                case "CmdShowMouseRadarSettings":
-                    showDialog("MouseRadarSettingsForm");
-                    break;
-
                 case "CmdShowMouseGridSettings":
                     showDialog("MouseGridSettingsForm");
                     break;
 
                 case "CmdShowVoiceSettings":
-                    showDialog("VoiceSettingsForm");
+                    showDialog("TextToSpeechSettingsForm");
                     break;
 
-                case "CmdShowMuteScreenSettings":
-                    showDialog("MuteScreenSettingsForm");
+                case "CmdShowScreenLockSettings":
+                    showDialog("ScreenLockSettingsForm");
                     break;
 
-                case "CmdShowDesignSettings":
+                case "CmdResizeRepositionScanner":
                     showDialog("ResizeScannerForm");
                     break;
 
@@ -145,12 +107,16 @@ namespace ACAT.Lib.Extension.CommandHandlers
             var appName = (attributes.Length != 0) ? ((AssemblyTitleAttribute)attributes[0]).Title : String.Empty;
 
             var version = ACATPreferences.ApplicationAssembly.GetName().Version.ToString();
-            var versionInfo = "Version " + version;
+            var versionInfo = String.Format(R.GetString("Version"), version);
 
             attributes = ACATPreferences.ApplicationAssembly.GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false);
             var copyrightInfo = (attributes.Length != 0) ? ((AssemblyCopyrightAttribute)attributes[0]).Copyright : String.Empty;
 
-            DialogUtils.ShowAboutBox(parentForm, "AboutBoxLogo.png", appName, versionInfo, copyrightInfo, Attributions.GetAll());
+            attributes = ACATPreferences.ApplicationAssembly.GetCustomAttributes(typeof(AssemblyCompanyAttribute), false);
+
+            var companyName = (attributes.Length != 0) ? ((AssemblyCompanyAttribute)attributes[0]).Company : String.Empty;
+
+            DialogUtils.ShowAboutBox(parentForm, "AboutBoxLogo.png", appName, versionInfo, companyName, copyrightInfo, Attributions.GetAll());
         }
 
         /// <summary>

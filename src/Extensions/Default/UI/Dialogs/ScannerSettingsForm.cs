@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ScannerSettingsForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,51 +18,16 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Core.Widgets;
 using ACAT.Lib.Extension;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
@@ -70,14 +35,15 @@ namespace ACAT.Extensions.Default.UI.Dialogs
     /// Sets the scanner settings such as the various timings,
     /// number of iterations for scanning etc.
     /// </summary>
-    [DescriptorAttribute("3BC26865-9D90-4DFD-BFAB-D7E69DDFA789", "ScannerSettingsForm",
-                            "Mute Settings Dialog")]
+    [DescriptorAttribute("3BC26865-9D90-4DFD-BFAB-D7E69DDFA789",
+                        "ScannerSettingsForm",
+                        "Mute Settings Dialog")]
     public partial class ScannerSettingsForm : Form, IDialogPanel
     {
         /// <summary>
         /// The DialogCommon object
         /// </summary>
-        private readonly DialogCommon _dialogCommon;
+        private DialogCommon _dialogCommon;
 
         /// <summary>
         ///  Did the user change anything?
@@ -91,15 +57,6 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             InitializeComponent();
 
-            _dialogCommon = new DialogCommon(this);
-
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
-
-            initWidgetSettings(Common.AppPreferences);
-
             Load += ScannerSettingsForm_Load;
             FormClosing += ScannerSettingsForm_FormClosing;
         }
@@ -111,6 +68,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             get { return DescriptorAttribute.GetDescriptor(GetType()); }
         }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
 
         /// <summary>
         /// Gets the synch object
@@ -132,6 +94,25 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Intitializes the class
+        /// </summary>
+        /// <param name="startupArg">startup param</param>
+        /// <returns>true on success</returns>
+        public bool Initialize(StartupArg startupArg)
+        {
+            _dialogCommon = new DialogCommon(this);
+
+            if (!_dialogCommon.Initialize(startupArg))
+            {
+                return false;
+            }
+
+            initWidgetSettings(Common.AppPreferences);
+
+            return true;
+        }
+
+        /// <summary>
         /// Triggered when a widget is actuated.
         /// </summary>
         /// <param name="widget">Which one triggered?</param>
@@ -146,7 +127,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 return;
             }
 
-            Invoke(new MethodInvoker(delegate()
+            Invoke(new MethodInvoker(delegate
             {
                 switch (value)
                 {
@@ -218,26 +199,29 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Get the values from the form and update the settings
+        /// Gets the values from the form and updates the settings. Returns
+        /// the preferences object with the new settings
         /// </summary>
+        /// <returns>The </returns>
         private ACATPreferences getSettingsFromUI()
         {
-            var rootWidget = _dialogCommon.GetRootWidget();
+            var rootWidget = PanelCommon.RootWidget;
             var prefs = ACATPreferences.Load();
 
-            prefs.SelectClick = Common.AppPreferences.SelectClick = WidgetUtils.GetCheckBoxWidgetState(rootWidget, pbSelectingClick.Name);
+            prefs.SelectClick = Common.AppPreferences.SelectClick = (rootWidget.Finder.FindChild(pbSelectingClick.Name) as CheckBoxWidget).GetState();
 
-            prefs.HalfScanIterations = Common.AppPreferences.HalfScanIterations = WidgetUtils.GetSliderState(rootWidget, tbEveryHalf.Name, WidgetUtils.SliderUnitsOnes);
-            prefs.RowScanIterations = Common.AppPreferences.RowScanIterations = WidgetUtils.GetSliderState(rootWidget, tbEveryRow.Name, WidgetUtils.SliderUnitsOnes);
-            prefs.ColumnScanIterations = Common.AppPreferences.ColumnScanIterations = WidgetUtils.GetSliderState(rootWidget, tbEveryColumn.Name, WidgetUtils.SliderUnitsOnes);
-            prefs.WordPredictionScanIterations = Common.AppPreferences.WordPredictionScanIterations = WidgetUtils.GetSliderState(rootWidget, tbWordPrediction.Name, WidgetUtils.SliderUnitsOnes);
+            prefs.GridScanIterations = Common.AppPreferences.GridScanIterations = (rootWidget.Finder.FindChild(tbEveryHalf.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
+            prefs.RowScanIterations = Common.AppPreferences.RowScanIterations = (rootWidget.Finder.FindChild(tbEveryRow.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
+            prefs.ColumnScanIterations = Common.AppPreferences.ColumnScanIterations = (rootWidget.Finder.FindChild(tbEveryColumn.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
+            prefs.WordPredictionScanIterations = Common.AppPreferences.WordPredictionScanIterations = (rootWidget.Finder.FindChild(tbWordPrediction.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
+            prefs.StripScannerColumnIterations = Common.AppPreferences.StripScannerColumnIterations = (rootWidget.Finder.FindChild(tbStripScanner.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
 
-            prefs.AcceptTime = Common.AppPreferences.AcceptTime = WidgetUtils.GetSliderState(rootWidget, tbAcceptTime.Name, WidgetUtils.SliderUnitsThousandths);
-            prefs.SteppingTime = Common.AppPreferences.SteppingTime = WidgetUtils.GetSliderState(rootWidget, tbSteppingTime.Name, WidgetUtils.SliderUnitsThousandths);
-            prefs.HesitateTime = Common.AppPreferences.HesitateTime = WidgetUtils.GetSliderState(rootWidget, tbHesitateTime.Name, WidgetUtils.SliderUnitsThousandths);
-            prefs.WordPredictionHesitateTime = Common.AppPreferences.WordPredictionHesitateTime = WidgetUtils.GetSliderState(rootWidget, tbWordListHesitateTime.Name, WidgetUtils.SliderUnitsThousandths);
-            prefs.TabScanTime = Common.AppPreferences.TabScanTime = WidgetUtils.GetSliderState(rootWidget, tbTabScanTime.Name, WidgetUtils.SliderUnitsThousandths);
-            prefs.FirstRepeatTime = Common.AppPreferences.FirstRepeatTime = WidgetUtils.GetSliderState(rootWidget, tbFirstRepeatTime.Name, WidgetUtils.SliderUnitsThousandths);
+            prefs.MinActuationHoldTime = Common.AppPreferences.MinActuationHoldTime = (rootWidget.Finder.FindChild(tbAcceptTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
+            prefs.ScanTime = Common.AppPreferences.ScanTime = (rootWidget.Finder.FindChild(tbSteppingTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
+            prefs.FirstPauseTime = Common.AppPreferences.FirstPauseTime = (rootWidget.Finder.FindChild(tbHesitateTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
+            prefs.WordPredictionFirstPauseTime = Common.AppPreferences.WordPredictionFirstPauseTime = (rootWidget.Finder.FindChild(tbWordListHesitateTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
+            prefs.MenuDialogScanTime = Common.AppPreferences.MenuDialogScanTime = (rootWidget.Finder.FindChild(tbTabScanTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
+            prefs.FirstRepeatTime = Common.AppPreferences.FirstRepeatTime = (rootWidget.Finder.FindChild(tbFirstRepeatTime.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsThousandths);
 
             return prefs;
         }
@@ -249,22 +233,22 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// <param name="prefs">ACAT preferences</param>
         private void initWidgetSettings(ACATPreferences prefs)
         {
-            // TOGGLE IMAGE BUTTON KEYS USED FOR BOTTOM-LEFT PANEL
-            var rootWidget = _dialogCommon.GetRootWidget();
+            var rootWidget = PanelCommon.RootWidget;
 
-            WidgetUtils.SetCheckBoxWidgetState(rootWidget, pbSelectingClick.Name, prefs.SelectClick);
+            (rootWidget.Finder.FindChild(pbSelectingClick.Name) as CheckBoxWidget).SetState(prefs.SelectClick);
 
-            WidgetUtils.SetSliderState(rootWidget, tbEveryHalf.Name, prefs.HalfScanIterations, WidgetUtils.SliderUnitsOnes);
-            WidgetUtils.SetSliderState(rootWidget, tbEveryRow.Name, prefs.RowScanIterations, WidgetUtils.SliderUnitsOnes);
-            WidgetUtils.SetSliderState(rootWidget, tbEveryColumn.Name, prefs.ColumnScanIterations, WidgetUtils.SliderUnitsOnes);
-            WidgetUtils.SetSliderState(rootWidget, tbWordPrediction.Name, prefs.WordPredictionScanIterations, WidgetUtils.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(tbEveryHalf.Name) as SliderWidget).SetState(prefs.GridScanIterations, SliderWidget.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(tbEveryRow.Name) as SliderWidget).SetState(prefs.RowScanIterations, SliderWidget.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(tbEveryColumn.Name) as SliderWidget).SetState(prefs.ColumnScanIterations, SliderWidget.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(tbWordPrediction.Name) as SliderWidget).SetState(prefs.WordPredictionScanIterations, SliderWidget.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(tbStripScanner.Name) as SliderWidget).SetState(prefs.StripScannerColumnIterations, SliderWidget.SliderUnitsOnes);
 
-            WidgetUtils.SetSliderState(rootWidget, tbAcceptTime.Name, prefs.AcceptTime, WidgetUtils.SliderUnitsThousandths);
-            WidgetUtils.SetSliderState(rootWidget, tbSteppingTime.Name, prefs.SteppingTime, WidgetUtils.SliderUnitsThousandths);
-            WidgetUtils.SetSliderState(rootWidget, tbHesitateTime.Name, prefs.HesitateTime, WidgetUtils.SliderUnitsThousandths);
-            WidgetUtils.SetSliderState(rootWidget, tbWordListHesitateTime.Name, prefs.WordPredictionHesitateTime, WidgetUtils.SliderUnitsThousandths);
-            WidgetUtils.SetSliderState(rootWidget, tbTabScanTime.Name, prefs.TabScanTime, WidgetUtils.SliderUnitsThousandths);
-            WidgetUtils.SetSliderState(rootWidget, tbFirstRepeatTime.Name, prefs.FirstRepeatTime, WidgetUtils.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbAcceptTime.Name) as SliderWidget).SetState(prefs.MinActuationHoldTime, SliderWidget.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbSteppingTime.Name) as SliderWidget).SetState(prefs.ScanTime, SliderWidget.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbHesitateTime.Name) as SliderWidget).SetState(prefs.FirstPauseTime, SliderWidget.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbWordListHesitateTime.Name) as SliderWidget).SetState(prefs.WordPredictionFirstPauseTime, SliderWidget.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbTabScanTime.Name) as SliderWidget).SetState(prefs.MenuDialogScanTime, SliderWidget.SliderUnitsThousandths);
+            (rootWidget.Finder.FindChild(tbFirstRepeatTime.Name) as SliderWidget).SetState(prefs.FirstRepeatTime, SliderWidget.SliderUnitsThousandths);
         }
 
         /// <summary>
@@ -272,7 +256,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// </summary>
         private void loadDefaultSettings()
         {
-            if (DialogUtils.Confirm(this, "Restore default settings?"))
+            if (DialogUtils.Confirm(this, R.GetString("RestoreDefaultSettings")))
             {
                 // get entire default file and just set those settings that belong to this preferences screen
                 initWidgetSettings(ACATPreferences.LoadDefaultSettings());
@@ -281,7 +265,17 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Confirm with the user and quit the dialog
+        /// Populate form controls text from Language resource
+        /// </summary>
+        private void populateFormText()
+        {
+            panelTitle.Text = R.GetString(panelTitle.Text);
+            lblNumberofTimes.Text = R.GetString(lblNumberofTimes.Text);
+            lblScanTimes.Text = R.GetString(lblScanTimes.Text);
+        }
+
+        /// <summary>
+        /// Confirms with the user and quits the dialog
         /// </summary>
         private void quit()
         {
@@ -289,7 +283,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
             if (_isDirty)
             {
-                if (!DialogUtils.Confirm(this, "Changes not saved. Quit?"))
+                if (!DialogUtils.Confirm(this, R.GetString("ChangesNotSavedQuit")))
                 {
                     quit = false;
                 }
@@ -306,7 +300,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// </summary>
         private void saveSettingsAndQuit()
         {
-            if (_isDirty && DialogUtils.Confirm(this, "Save settings?"))
+            if (_isDirty && DialogUtils.Confirm(this, R.GetString("SaveSettings")))
             {
                 getSettingsFromUI().Save();
 
@@ -318,7 +312,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Form is closing. Release resources
+        /// Form is closing. Releases resources
         /// </summary>
         private void ScannerSettingsForm_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -330,11 +324,13 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// </summary>
         private void ScannerSettingsForm_Load(object sender, EventArgs e)
         {
+            populateFormText();
+
             _dialogCommon.OnLoad();
 
             subscribeToEvents();
 
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
@@ -344,7 +340,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         private void subscribeToEvents()
         {
             var widgetList = new List<Widget>();
-            _dialogCommon.GetRootWidget().Finder.FindAllButtons(widgetList);
+            PanelCommon.RootWidget.Finder.FindAllButtons(widgetList);
 
             foreach (var widget in widgetList)
             {
@@ -352,7 +348,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
             }
 
             widgetList.Clear();
-            _dialogCommon.GetRootWidget().Finder.FindAllChildren(typeof(SliderWidget), widgetList);
+            PanelCommon.RootWidget.Finder.FindAllChildren(typeof(SliderWidget), widgetList);
             foreach (var widget in widgetList)
             {
                 widget.EvtValueChanged += widget_EvtValueChanged;

@@ -8,9 +8,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("Assistive Context-Aware Toolkit (ACAT)")]
 [assembly: AssemblyDescription("Assistive Context-Aware Toolkit (ACAT)")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Intel Corporation")]
+[assembly: AssemblyCompany("http://01.org/acat")]
 [assembly: AssemblyProduct("Assistive Context-Aware Toolkit (ACAT)")]
-[assembly: AssemblyCopyright("Copyright © 2013-15 Intel Corporation.\nAll rights reserved.")]
+[assembly: AssemblyCopyright("Licensed and distributed under the Apache License v2.0 by Intel Corporation")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -32,5 +32,5 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers 
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.9.0")]
-[assembly: AssemblyFileVersion("0.9.0")]
+[assembly: AssemblyVersion("1.50.0.0")]
+[assembly: AssemblyFileVersion("1.50.0.0")]

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="RunCommandHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -80,7 +80,7 @@ namespace ACAT.Lib.Core.PanelManagement.CommandDispatcher
         public String Command { get; set; }
 
         /// <summary>
-        /// Gets or sets the command to exit after the command handler
+        /// Gets or sets the command to execute after the command handler
         /// returns
         /// </summary>
         public virtual PostExitCommand Status { get; set; }

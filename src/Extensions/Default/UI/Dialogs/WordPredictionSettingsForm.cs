@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WordPredictionSettingsForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,65 +18,31 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Core.Widgets;
 using ACAT.Lib.Extension;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
     /// <summary>
     /// Dialog to change settings related to word prediction
     /// </summary>
-    [DescriptorAttribute("DF4867B5-C812-44A9-8DFB-1D6D9DC4A81A", "WordPredictionSettingsForm",
-                            "Word Prediction Settings Dialog")]
+    [DescriptorAttribute("DF4867B5-C812-44A9-8DFB-1D6D9DC4A81A",
+                        "WordPredictionSettingsForm",
+                        "Word Prediction Settings Dialog")]
     public partial class WordPredictionSettingsForm : Form, IDialogPanel
     {
         /// <summary>
         /// The DialogCommon object
         /// </summary>
-        private readonly DialogCommon _dialogCommon;
+        private DialogCommon _dialogCommon;
 
         /// <summary>
         /// Did the user change anything?
@@ -90,15 +56,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             InitializeComponent();
 
-            _dialogCommon = new DialogCommon(this);
-
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
-
-            initWidgetSettings(Common.AppPreferences);
-
+            panelTitle.Text = R.GetString("WordPredictionSettings");
             Load += ScannerSettingsForm_Load;
             FormClosing += ScannerSettingsForm_FormClosing;
         }
@@ -110,6 +68,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             get { return DescriptorAttribute.GetDescriptor(GetType()); }
         }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
 
         /// <summary>
         /// Gets the synch object
@@ -128,6 +91,25 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Intitializes the class
+        /// </summary>
+        /// <param name="startupArg">startup param</param>
+        /// <returns>true on success</returns>
+        public bool Initialize(StartupArg startupArg)
+        {
+            _dialogCommon = new DialogCommon(this);
+
+            if (!_dialogCommon.Initialize(startupArg))
+            {
+                return false;
+            }
+
+            initWidgetSettings(Common.AppPreferences);
+
+            return true;
+        }
+
+        /// <summary>
         /// Triggered when a widget is actuated
         /// </summary>
         /// <param name="widget">Which one triggered?</param>
@@ -142,7 +124,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 return;
             }
 
-            Invoke(new MethodInvoker(delegate()
+            Invoke(new MethodInvoker(delegate
             {
                 switch (value)
                 {
@@ -214,26 +196,25 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Init the controls in the dialog box based on
+        /// Inits the controls in the dialog box based on
         /// settings
         /// </summary>
         /// <param name="prefs">ACAT settings</param>
         private void initWidgetSettings(ACATPreferences prefs)
         {
-            var rootWidget = _dialogCommon.GetRootWidget();
+            var rootWidget = PanelCommon.RootWidget;
 
-            WidgetUtils.SetCheckBoxWidgetState(rootWidget, pbDynamicLearning.Name, prefs.EnableWordPredictionDynamicModel);
-            WidgetUtils.SetCheckBoxWidgetState(rootWidget, pbUseCorpus.Name, prefs.EnableWordPredictionCorpusModel);
-            WidgetUtils.SetSliderState(rootWidget, tbWordCount.Name, prefs.WordPredictionCount, WidgetUtils.SliderUnitsOnes);
+            (rootWidget.Finder.FindChild(pbDynamicLearning.Name) as CheckBoxWidget).SetState(prefs.EnableWordPredictionDynamicModel);
+            (rootWidget.Finder.FindChild(tbWordCount.Name) as SliderWidget).SetState(prefs.WordPredictionCount, SliderWidget.SliderUnitsOnes);
         }
 
         /// <summary>
-        /// Load default values for all the settings in the
+        /// Loads default values for all the settings in the
         /// dialog
         /// </summary>
         private void loadDefaultSettings()
         {
-            if (DialogUtils.Confirm(this, "Restore default settings?"))
+            if (DialogUtils.Confirm(this, R.GetString("RestoreDefaultSettings")))
             {
                 Context.AppWordPredictionManager.LoadDefaultSettings();
 
@@ -243,7 +224,17 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Confirm with the user and quit the dialog
+        /// Populate form controls text from Language resource
+        /// </summary>
+        private void populateFormText()
+        {
+            panelTitle.Text = R.GetString(panelTitle.Text);
+            lblDynamicLearning.Text = R.GetString(lblDynamicLearning.Text);
+            lblWordCount.Text = R.GetString(lblWordCount.Text);
+        }
+
+        /// <summary>
+        /// Confirms with the user and quits the dialog
         /// </summary>
         private void quit()
         {
@@ -251,7 +242,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
             if (_isDirty)
             {
-                if (!DialogUtils.Confirm(this, "Changes not saved. Quit?"))
+                if (!DialogUtils.Confirm(this, R.GetString("ChangesNotSavedQuit")))
                 {
                     quit = false;
                 }
@@ -264,11 +255,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Save settings and close the dialog
+        /// Saves settings and closes the dialog
         /// </summary>
         private void saveSettingsAndQuit()
         {
-            if (_isDirty && DialogUtils.Confirm(this, "Save settings?"))
+            if (_isDirty && DialogUtils.Confirm(this, R.GetString("SaveSettings")))
             {
                 updateSettingsFromUI().Save();
 
@@ -294,11 +285,13 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// </summary>
         private void ScannerSettingsForm_Load(object sender, EventArgs e)
         {
+            populateFormText();
+
             _dialogCommon.OnLoad();
 
             subscribeToEvents();
 
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
@@ -308,7 +301,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         private void subscribeToEvents()
         {
             var widgetList = new List<Widget>();
-            _dialogCommon.GetRootWidget().Finder.FindAllButtons(widgetList);
+            PanelCommon.RootWidget.Finder.FindAllButtons(widgetList);
 
             foreach (var widget in widgetList)
             {
@@ -316,7 +309,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
             }
 
             widgetList.Clear();
-            _dialogCommon.GetRootWidget().Finder.FindAllChildren(typeof(SliderWidget), widgetList);
+            PanelCommon.RootWidget.Finder.FindAllChildren(typeof(SliderWidget), widgetList);
 
             foreach (var widget in widgetList)
             {
@@ -326,16 +319,17 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
         /// <summary>
         /// Update settings based on what the user has
-        /// set in the dialog
+        /// set in the dialog.  Returns the preferences object
+        /// with the settings
         /// </summary>
+        /// <returns>Preferences object</returns>
         private ACATPreferences updateSettingsFromUI()
         {
-            var rootWidget = _dialogCommon.GetRootWidget();
+            var rootWidget = PanelCommon.RootWidget;
             var prefs = ACATPreferences.Load();
 
-            prefs.EnableWordPredictionDynamicModel = Common.AppPreferences.EnableWordPredictionDynamicModel = WidgetUtils.GetCheckBoxWidgetState(rootWidget, pbDynamicLearning.Name);
-            prefs.EnableWordPredictionCorpusModel = Common.AppPreferences.EnableWordPredictionCorpusModel = WidgetUtils.GetCheckBoxWidgetState(rootWidget, pbUseCorpus.Name);
-            prefs.WordPredictionCount = Common.AppPreferences.WordPredictionCount = WidgetUtils.GetSliderState(rootWidget, tbWordCount.Name, WidgetUtils.SliderUnitsOnes);
+            prefs.EnableWordPredictionDynamicModel = Common.AppPreferences.EnableWordPredictionDynamicModel = (rootWidget.Finder.FindChild(pbDynamicLearning.Name) as CheckBoxWidget).GetState();
+            prefs.WordPredictionCount = Common.AppPreferences.WordPredictionCount = (rootWidget.Finder.FindChild(tbWordCount.Name) as SliderWidget).GetState(SliderWidget.SliderUnitsOnes);
 
             return prefs;
         }
@@ -348,6 +342,16 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         private void widget_EvtValueChanged(object sender, WidgetEventArgs e)
         {
             _isDirty = true;
+        }
+
+        private void lblOK_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void lblBack_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

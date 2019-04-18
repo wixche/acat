@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="YesNoDialogForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,64 +18,37 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.Lib.Core.ActuatorManagement;
 using ACAT.Lib.Core.Extensions;
+using ACAT.Lib.Core.InputActuators;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
     /// <summary>
-    /// Displays a dialog box with a prompt and
-    /// yes no buttons. Can be used for user confirmaton
+    /// A dialog which has a prompt and expects
+    /// a YES/NO response.  Has a blank spaces between the yes
+    /// and no to give user time to react
     /// </summary>
-    [DescriptorAttribute("285CB072-737D-4EE1-B866-F574BA633401", "YesNoDialogForm",
-                        "Yes/No Dialog")]
+    [DescriptorAttribute("640B79F7-0574-45A5-9A8C-50F87C62B08A",
+                            "YesNoDialogForm",
+                            "Yes/No Dialog")]
     public partial class YesNoDialogForm : Form, IDialogPanel, IExtension
     {
         /// <summary>
         /// Provides access to methods and properties in this class
         /// </summary>
         private readonly ExtensionInvoker _invoker;
+
+        /// <summary>
+        /// The keyboard actuator
+        /// </summary>
+        private readonly KeyboardActuator _keyboardActuator;
 
         /// <summary>
         /// The DialogCommon object
@@ -93,12 +66,18 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
             Choice = false;
 
-            TextButton1 = "Yes";
-            TextButton2 = "No";
             Caption = String.Empty;
             TitleBar = "ACAT";
 
-            Init();
+            var actuator = ActuatorManager.Instance.GetActuator(typeof(KeyboardActuator));
+            if (actuator is KeyboardActuator)
+            {
+                _keyboardActuator = actuator as KeyboardActuator;
+                _keyboardActuator.EvtKeyDown += keyboardActuator_EvtKeyDown;
+            }
+
+            Load += Form_Load;
+            FormClosing += Form_Closing;
         }
 
         /// <summary>
@@ -108,7 +87,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
         /// <summary>
         /// Gets the choice the user made. True
-        /// if yes (or if the first button was selected)
+        /// if the user selected "Yes"
         /// </summary>
         public bool Choice { get; set; }
 
@@ -121,6 +100,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
+
+        /// <summary>
         /// Gets the synch object
         /// </summary>
         public SyncLock SyncObj
@@ -129,19 +113,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Gets / set the text for the first text
-        /// button. Typically this is a "Yes"
-        /// </summary>
-        public String TextButton1 { get; set; }
-
-        /// <summary>
-        /// Gets / sets the text for the second text
-        /// button. Typically this is a "No"
-        /// </summary>
-        public String TextButton2 { get; set; }
-
-        /// <summary>
-        /// Gets or sets the title for the dialog box
+        /// Gets or sets the title bar
         /// </summary>
         public String TitleBar { get; set; }
 
@@ -155,36 +127,29 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 new SecurityPermission(SecurityPermissionFlag.UnmanagedCode).Demand();
                 var createParams = base.CreateParams;
                 createParams.ExStyle |= Windows.WindowStyleFlags.WS_EX_NOACTIVATE;
-                return createParams;
+                return DialogCommon.SetFormStyles(createParams);
             }
         }
 
         /// <summary>
         /// Returns the extension invoker object
         /// </summary>
-        /// <returns></returns>
+        /// <returns>The invoker object</returns>
         public ExtensionInvoker GetInvoker()
         {
             return _invoker;
         }
 
         /// <summary>
-        /// Initialzes the dialog
+        /// Initializes the dialog
         /// </summary>
+        /// <param name="startupArg">startup info</param>
         /// <returns>true on success</returns>
-        public bool Init()
+        public bool Initialize(StartupArg startupArg)
         {
             _dialogCommon = new DialogCommon(this);
 
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
-
-            Load += Form_Load;
-            FormClosing += Form_Closing;
-
-            return true;
+            return _dialogCommon.Initialize(startupArg);
         }
 
         /// <summary>
@@ -203,12 +168,12 @@ namespace ACAT.Extensions.Default.UI.Dialogs
 
             switch (value)
             {
-                case "@button1":
-                    Choice = true;
+                case "@CmdNo":
+                    Choice = false;
                     break;
 
-                case "@button2":
-                    Choice = false;
+                case "@CmdYes":
+                    Choice = true;
                     break;
             }
 
@@ -244,12 +209,20 @@ namespace ACAT.Extensions.Default.UI.Dialogs
             }
         }
 
+        /// <summary>
+        /// Form is closing. Release resources
+        /// </summary>
+        /// <param name="e">event args</param>
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             _dialogCommon.OnFormClosing(e);
             base.OnFormClosing(e);
         }
 
+        /// <summary>
+        /// Window procedure
+        /// </summary>
+        /// <param name="m">windows message</param>
         [EnvironmentPermissionAttribute(SecurityAction.LinkDemand, Unrestricted = true)]
         protected override void WndProc(ref Message m)
         {
@@ -264,34 +237,57 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// <summary>
         /// Form is closing. Release resources
         /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
         private void Form_Closing(object sender, FormClosingEventArgs e)
         {
+            _keyboardActuator.EvtKeyDown -= keyboardActuator_EvtKeyDown;
             _dialogCommon.OnClosing();
         }
 
         /// <summary>
         /// Form has been loaded
         /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
         private void Form_Load(object sender, EventArgs e)
         {
             _dialogCommon.OnLoad();
 
             initialize();
 
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
-        /// Initialize the scanner
+        /// Initializes the form
         /// </summary>
-        /// <returns></returns>
+        /// <returns>true</returns>
         private bool initialize()
         {
             Windows.SetText(labelCaption, Caption);
-            Windows.SetText(Button1, TextButton1);
-            Windows.SetText(Button2, TextButton2);
+            Windows.SetText(this, TitleBar);
 
             return true;
+        }
+
+        /// <summary>
+        /// Keydown event handler.  Handles y n and escape
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="keyEventArgs">event args</param>
+        private void keyboardActuator_EvtKeyDown(object sender, KeyEventArgs keyEventArgs)
+        {
+            if (keyEventArgs.KeyCode == Keys.Escape || keyEventArgs.KeyCode == Keys.N)
+            {
+                Choice = false;
+                Close();
+            }
+            else if (keyEventArgs.KeyCode == Keys.Y)
+            {
+                Choice = true;
+                Close();
+            }
         }
     }
 }

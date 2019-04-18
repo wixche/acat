@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="IWordPredictor.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.Globalization;
 
 namespace ACAT.Lib.Core.WordPredictionManagement
 {
@@ -65,6 +30,7 @@ namespace ACAT.Lib.Core.WordPredictionManagement
     /// the next word using the previous n-words as context.  Some word predictors
     /// also support learning where the engine tunes its internal model for
     /// more accurate predictions based on the user.
+    /// All WordPredictors should implement this interface.
     /// </summary>
     public interface IWordPredictor : IDisposable
     {
@@ -92,29 +58,18 @@ namespace ACAT.Lib.Core.WordPredictionManagement
         int PredictionWordCount { get; set; }
 
         /// <summary>
-        /// Returns a dialog interface that the application will display to the user
-        /// to change settings that are specific to the word predictor
-        /// </summary>
-        /// <returns>The setttings dialog</returns>
-        IWordPredictorSettingsDialog SettingsDialog { get; }
-
-        /// <summary>
         /// Returns a flag indicating whether the word predictor supports
         /// dynamic learning.
         /// </summary>
         bool SupportsLearning { get; }
 
         /// <summary>
-        /// Returns a flag to indicate whether the word predictor supports a settings
-        /// dialog.  true if it does, false if it doesn't
+        /// Initialize the word predictor.  Language is optional,
+        /// if not specified, use the current culture
         /// </summary>
-        bool SupportsSettingsDialog { get; }
-
-        /// <summary>
-        /// Initialize the word predictor.
-        /// </summary>
+        /// <param name="ci">Language for the model</param>
         /// <returns>true on success, false on failure</returns>
-        bool Init();
+        bool Init(CultureInfo ci);
 
         /// <summary>
         /// Add the text to the word prediction models for better

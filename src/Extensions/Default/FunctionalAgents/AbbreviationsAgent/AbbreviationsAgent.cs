@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AbbreviationsAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,7 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Automation;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AbbreviationsManagement;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
@@ -29,74 +26,32 @@ using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension;
+using System;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
-
-namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
+namespace ACAT.Extensions.Default.FunctionalAgents.AbbreviationsAgent
 {
     /// <summary>
     /// Functional agent that manages the abbreviations scanner
-    /// which displays a list of abbreviations and the user
+    /// which displays a list of abbreviations.   The user
     /// can add, delete or modify abbreviations.
     /// </summary>
-    [DescriptorAttribute("4AD7D574-9C8F-4ED7-9152-F836F210F68E", "Abbreviations Agent", "UI to create/edit/delete abbreviations")]
+    [DescriptorAttribute("4AD7D574-9C8F-4ED7-9152-F836F210F68E",
+                            "Abbreviations Editor",
+                            "AbbreviationsAgent",
+                            "Creates/edits/deletes abbreviations")]
     public class AbbreviationsAgent : FunctionalAgentBase
     {
-        /// <summary>
-        /// this is the list of widgets that hold the abbreviations in the abbreviations
-        /// scanner.
-        /// </summary>
-        private readonly String[] _supportedFeatures =
-        {
-            "Select_1",
-            "Select_2",
-            "Select_3",
-            "Select_4",
-            "Select_5",
-            "Select_6",
-            "Select_7",
-            "Select_8",
-            "Select_9",
-            "Select_10",
-        };
-
         /// <summary>
         /// The abbreviation selected for editing
         /// </summary>
         private Abbreviation _abbreviationSelected;
+
+        /// <summary>
+        /// The abbreviations form
+        /// </summary>
+        private AbbreviationsScanner _abbrForm;
 
         /// <summary>
         /// Confirms whether the user wants to delete or
@@ -111,14 +66,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         private bool _editDeleteMenuShown;
 
         /// <summary>
-        /// The abbreviations form
+        /// To prevent reentrancy in AbbrFormEvtDone()
         /// </summary>
-        private AbbreviationsScanner _form;
-
-        /// <summary>
-        /// Has the scanner been shown yet?
-        /// </summary>
-        private bool _scannerShown;
+        private volatile bool _inDone;
 
         /// <summary>
         /// Get confirmation from the user
@@ -127,29 +77,31 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <returns>if the user said yes</returns>
         public static bool Confirm(String prompt)
         {
-            return DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentPanel(), prompt);
+            return DialogUtils.ConfirmScanner(PanelManager.Instance.GetCurrentForm(), prompt);
         }
 
         /// <summary>
         /// Invoked when the Functional agent is activated.  This is
         /// the entry point for the functional agent.
-        /// Creates the abbreviations scanner, subscribe to events
+        /// Creates the abbreviations scanner and displays
+        /// it.  Subscribes to events.
         /// </summary>
         /// <returns>true on success</returns>
         public override bool Activate()
         {
             bool retVal = true;
 
-            _scannerShown = false;
             ExitCode = CompletionCode.None;
-            _form = Context.AppPanelManager.CreatePanel("AbbreviationsScanner") as AbbreviationsScanner;
-            if (_form != null)
+            IsClosing = false;
+
+            _abbrForm = Context.AppPanelManager.CreatePanel("AbbreviationsScanner") as AbbreviationsScanner;
+            if (_abbrForm != null)
             {
-                _form.EvtDone += _form_EvtDone;
-                _form.EvtAddAbbreviation += _form_EvtAddAbbreviation;
-                _form.EvtEditAbbreviation += _form_EvtEditAbbreviation;
-                _form.FormClosing += _form_FormClosing;
-                Context.AppPanelManager.ShowDialog(_form);
+                subscribeToEvents();
+
+                IsActive = true;
+
+                Context.AppPanelManager.ShowDialog(_abbrForm);
             }
             else
             {
@@ -164,44 +116,37 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// to determine the 'enabled' state.
         /// </summary>
         /// <param name="arg">info about the scanner button</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            switch (arg.Widget.SubClass)
+            arg.Handled = true;
+
+            switch (arg.Command)
             {
-                case "Back":
-                case "DeletePreviousWord":
-                    if (_form != null && Windows.GetVisible(_form))
+                case "CmdPunctuationScanner":
+                case "CmdNumberScanner":
+                    arg.Enabled = true;
+                    break;
+
+                default:
+
+                    if (_abbrForm != null && !Windows.GetVisible(_abbrForm))
                     {
-                        arg.Enabled = !_form.IsFilterEmpty();
-                    }
-                    else
-                    {
-                        arg.Enabled = true;
+                        arg.Handled = false;
+                        return;
                     }
 
-                    arg.Handled = true;
-                    return;
-
-                case "clearText":
-                    if (_form != null && Windows.GetVisible(_form))
+                    if (_abbrForm != null && Windows.GetVisible(_abbrForm))
                     {
-                        arg.Enabled = !_form.IsFilterEmpty();
+                        _abbrForm.CheckCommandEnabled(arg);
                     }
-                    else
+
+                    if (!arg.Handled)
                     {
                         arg.Enabled = false;
+                        arg.Handled = true;
                     }
-
-                    arg.Handled = true;
-                    return;
-
-                case "FileBrowserToggle":
-                    arg.Handled = true;
-                    arg.Enabled = false;
-                    return;
+                    break;
             }
-
-            checkWidgetEnabled(_supportedFeatures, arg);
         }
 
         /// <summary>
@@ -212,35 +157,13 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <param name="handled">was this handled</param>
         public override void OnFocusChanged(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
-            Log.Debug("OnFocus: " + monitorInfo.ToString());
+            if (IsClosing)
+            {
+                Log.Debug("IsClosing is true.  Will not handle the focus change");
+                return;
+            }
 
             base.OnFocusChanged(monitorInfo, ref handled);
-
-            var handle = IntPtr.Zero;
-            if (_form != null)
-            {
-                _form.Invoke(new MethodInvoker(delegate()
-                    {
-                        handle = _form.Handle;
-                    }));
-            }
-
-            // if the abbreviations scanner is up, display the
-            // alphabet scanner
-            if (handle != IntPtr.Zero && monitorInfo.FgHwnd == handle)
-            {
-                if (!_scannerShown)
-                {
-                    var arg = new PanelRequestEventArgs(PanelClasses.AlphabetMinimal, monitorInfo)
-                    {
-                        RequestArg = _form,
-                        TargetPanel = _form,
-                        UseCurrentScreenAsParent = true
-                    };
-                    showPanel(this, arg);
-                    _scannerShown = true;
-                }
-            }
 
             handled = true;
         }
@@ -270,10 +193,6 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
 
             switch (command)
             {
-                case "clearText":
-                    _form.ClearFilter();
-                    break;
-
                 case "CancelEditDelAbbreviation":
                     closeEditDeleteConfirmScanner();
                     break;
@@ -290,7 +209,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
                 case "DeleteAbbreviation":
                     if (_abbreviationSelected != null)
                     {
-                        if (DialogUtils.ConfirmScanner("Delete " + _abbreviationSelected.Mnemonic + "?"))
+                        if (Confirm(String.Format(R.GetString("DeleteAbbr"), _abbreviationSelected.Mnemonic)))
                         {
                             deleteAbbreviation(_abbreviationSelected);
                             _abbreviationSelected = null;
@@ -302,9 +221,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
 
                 default:
                     Log.Debug(command);
-                    if (_form != null)
+                    if (_abbrForm != null)
                     {
-                        _form.OnRunCommand(command, ref handled);
+                        _abbrForm.OnRunCommand(command, ref handled);
                     }
 
                     break;
@@ -318,18 +237,28 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <param name="focusedElement">the automation object associated with the control</param>
         /// <param name="handled">was this handled?</param>
         /// <returns>object created</returns>
-        protected override TextControlAgentBase createEditControlTextInterface(IntPtr handle, 
-                                                                                AutomationElement focusedElement, 
+        protected override TextControlAgentBase createEditControlTextInterface(IntPtr handle,
+                                                                                AutomationElement focusedElement,
                                                                                 ref bool handled)
         {
             return new AbbreviationsTextControlAgent(handle, focusedElement, ref handled);
         }
 
         /// <summary>
+        /// Handler for when the abbr scanner is closing.
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event arg</param>
+        private void AbbrFormAbbrFormClosing(object sender, FormClosingEventArgs e)
+        {
+            unsubscribeFromEvents();
+        }
+
+        /// <summary>
         /// Event handler to add an abbreviation
         /// </summary>
         /// <param name="abbr">abbreviation to add</param>
-        private void _form_EvtAddAbbreviation(string abbr)
+        private void AbbrFormEvtAddAbbreviation(string abbr)
         {
             addAbbreviation(new Abbreviation(abbr, String.Empty, Abbreviation.AbbreviationMode.Speak));
         }
@@ -338,13 +267,23 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// Event handler for event raised when the user
         /// wants to quit
         /// </summary>
-        /// <param name="flag">Quit if false</param>
-        private void _form_EvtDone(bool flag)
+        /// <param name="dontQuit">Don't quit if true</param>
+        private void AbbrFormEvtDone(bool dontQuit)
         {
-            if (!flag)
+            if (_inDone)
+            {
+                return;
+            }
+
+            _inDone = true;
+
+            // don't you love double negatives?
+            if (!dontQuit)
             {
                 quit();
             }
+
+            _inDone = false;
         }
 
         /// <summary>
@@ -352,36 +291,38 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// if the user want to edit or delete
         /// </summary>
         /// <param name="abbr">Abbreviation to be edited</param>
-        private void _form_EvtEditAbbreviation(Abbreviation abbr)
+        private void AbbrFormEvtEditAbbreviation(Abbreviation abbr)
         {
             if (!_editDeleteMenuShown)
             {
                 _abbreviationSelected = abbr;
-                _editDeleteConfirmScanner = Context.AppPanelManager.CreatePanel("AbbreviationEditDeleteConfirm", "Abbreviation");
+                _editDeleteConfirmScanner = Context.AppPanelManager.CreatePanel("AbbreviationEditDeleteConfirm", abbr.Mnemonic);
                 if (_editDeleteConfirmScanner != null)
                 {
                     _editDeleteMenuShown = true;
                     IPanel panel = _editDeleteConfirmScanner as IPanel;
-                    Context.AppPanelManager.Show(Context.AppPanelManager.GetCurrentPanel(), panel);
+                    Context.AppPanelManager.Show(Context.AppPanelManager.GetCurrentForm(), panel);
                 }
             }
         }
 
         /// <summary>
-        /// Handler for when the abbr scanner is closing. Close
-        /// the alphabet scanner as well
+        /// Event handler to display the alphabet scanner
         /// </summary>
         /// <param name="sender">event sender</param>
-        /// <param name="e">event arg</param>
-        private void _form_FormClosing(object sender, FormClosingEventArgs e)
+        /// <param name="e">event args</param>
+        private void AbbrFormEvtShowScanner(object sender, EventArgs e)
         {
-            _form.EvtDone -= _form_EvtDone;
-            _form.EvtAddAbbreviation -= _form_EvtAddAbbreviation;
-            _form.EvtEditAbbreviation -= _form_EvtEditAbbreviation;
-
-            if (Context.AppPanelManager.GetCurrentPanel() != null)
+            if (_abbrForm != null)
             {
-                Windows.CloseForm(Context.AppPanelManager.GetCurrentPanel() as Form);
+                var arg = new PanelRequestEventArgs(PanelClasses.AlphabetMinimal,
+                                                    WindowActivityMonitor.GetForegroundWindowInfo())
+                {
+                    TargetPanel = _abbrForm,
+                    RequestArg = _abbrForm,
+                    UseCurrentScreenAsParent = true
+                };
+                showPanel(this, arg);
             }
         }
 
@@ -392,7 +333,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <param name="abbr">abbreviation to add</param>
         private void addAbbreviation(Abbreviation abbr)
         {
-            Windows.SetVisible(_form, false);
+            Windows.SetVisible(_abbrForm, false);
 
             var operation = new AbbrOperation { InputAbbreviation = abbr, Add = true };
 
@@ -400,14 +341,14 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
 
             if (!operation.Cancel)
             {
-                Context.AppAbbreviations.Add(operation.OutputAbbreviation);
-                Context.AppAbbreviations.Save();
-                Context.AppAbbreviations.Load();
+                Context.AppAbbreviationsManager.Abbreviations.Add(operation.OutputAbbreviation);
+                Context.AppAbbreviationsManager.Abbreviations.Save();
+                Context.AppAbbreviationsManager.Abbreviations.Load();
             }
 
-            _form.LoadAbbreviations();
+            _abbrForm.LoadAbbreviations();
 
-            Windows.SetVisible(_form, true);
+            Windows.SetVisible(_abbrForm, true);
         }
 
         /// <summary>
@@ -430,11 +371,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// </summary>
         private void closeScanner()
         {
-            if (_form != null)
+            if (_abbrForm != null)
             {
-                Windows.CloseForm(_form);
-                _form = null;
-                _scannerShown = false;
+                Windows.CloseForm(_abbrForm);
+                _abbrForm = null;
             }
         }
 
@@ -445,10 +385,10 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <param name="abbr">abbreviation to delete</param>
         private void deleteAbbreviation(Abbreviation abbr)
         {
-            Context.AppAbbreviations.Remove(abbr.Mnemonic);
-            Context.AppAbbreviations.Save();
-            Context.AppAbbreviations.Load();
-            _form.LoadAbbreviations();
+            Context.AppAbbreviationsManager.Abbreviations.Remove(abbr.Mnemonic);
+            Context.AppAbbreviationsManager.Abbreviations.Save();
+            Context.AppAbbreviationsManager.Abbreviations.Load();
+            _abbrForm.LoadAbbreviations();
         }
 
         /// <summary>
@@ -458,7 +398,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         /// <param name="abbr">abbreviation to be edited</param>
         private void editAbbreviation(Abbreviation abbr)
         {
-            Windows.SetVisible(_form, false);
+            Windows.SetVisible(_abbrForm, false);
 
             var operation = new AbbrOperation { InputAbbreviation = abbr, Add = false };
 
@@ -467,26 +407,26 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
             {
                 if (operation.Delete)
                 {
-                    Context.AppAbbreviations.Remove(abbr.Mnemonic);
+                    Context.AppAbbreviationsManager.Abbreviations.Remove(abbr.Mnemonic);
                 }
                 else
                 {
-                    if (!Context.AppAbbreviations.Exists(operation.OutputAbbreviation.Mnemonic))
+                    if (!Context.AppAbbreviationsManager.Abbreviations.Exists(operation.OutputAbbreviation.Mnemonic))
                     {
-                        Context.AppAbbreviations.Add(operation.OutputAbbreviation);
+                        Context.AppAbbreviationsManager.Abbreviations.Add(operation.OutputAbbreviation);
                     }
                     else
                     {
-                        Context.AppAbbreviations.Update(operation.OutputAbbreviation);
+                        Context.AppAbbreviationsManager.Abbreviations.Update(operation.OutputAbbreviation);
                     }
                 }
 
-                Context.AppAbbreviations.Save();
-                Context.AppAbbreviations.Load();
+                Context.AppAbbreviationsManager.Abbreviations.Save();
+                Context.AppAbbreviationsManager.Abbreviations.Load();
             }
 
-            _form.LoadAbbreviations();
-            Windows.SetVisible(_form, true);
+            _abbrForm.LoadAbbreviations();
+            Windows.SetVisible(_abbrForm, true);
         }
 
         /// <summary>
@@ -497,7 +437,7 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         private void editOrAddAbbreviation(AbbrOperation operation)
         {
             var dlg = Context.AppPanelManager.CreatePanel("AbbreviationEditorForm");
-            if (dlg == null)
+            if (!(dlg is IExtension))
             {
                 return;
             }
@@ -506,9 +446,9 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
             invoker.SetValue("InputAbbreviation", operation.InputAbbreviation);
             invoker.SetValue("Add", operation.Add);
 
-            _form.Pause();
+            _abbrForm.Pause();
             Context.AppPanelManager.ShowDialog(Context.AppPanelManager.GetCurrentPanel(), dlg as IPanel);
-            _form.Resume();
+            _abbrForm.Resume();
 
             bool? canceled = invoker.GetBoolValue("Cancel");
             var outputAbbreviation = invoker.GetValue("OutputAbbreviation") as Abbreviation;
@@ -534,27 +474,60 @@ namespace ACAT.Extensions.Hawking.FunctionalAgents.Abbreviations
         {
             bool quit = true;
 
-            if (_form == null)
+            if (_abbrForm == null)
             {
                 return;
             }
 
             if (showConfirmDialog)
             {
-                quit = DialogUtils.ConfirmScanner("Close and Exit?");
+                quit = Confirm(R.GetString("CloseQ"));
             }
 
             if (quit)
             {
+                IsActive = false;
+                IsClosing = true;
+
                 closeScanner();
                 Close();
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to events
+        /// </summary>
+        private void subscribeToEvents()
+        {
+            if (_abbrForm != null)
+            {
+                _abbrForm.EvtDone += AbbrFormEvtDone;
+                _abbrForm.EvtAddAbbreviation += AbbrFormEvtAddAbbreviation;
+                _abbrForm.EvtEditAbbreviation += AbbrFormEvtEditAbbreviation;
+                _abbrForm.FormClosing += AbbrFormAbbrFormClosing;
+                _abbrForm.EvtShowScanner += AbbrFormEvtShowScanner;
+            }
+        }
+
+        /// <summary>
+        /// Unsubscribe events
+        /// </summary>
+        private void unsubscribeFromEvents()
+        {
+            if (_abbrForm != null)
+            {
+                _abbrForm.EvtDone -= AbbrFormEvtDone;
+                _abbrForm.EvtAddAbbreviation -= AbbrFormEvtAddAbbreviation;
+                _abbrForm.EvtEditAbbreviation -= AbbrFormEvtEditAbbreviation;
+                _abbrForm.FormClosing -= AbbrFormAbbrFormClosing;
+                _abbrForm.EvtShowScanner -= AbbrFormEvtShowScanner;
             }
         }
     }
 
     /// <summary>
     /// Type of operation to perform on the abbreviation. This
-    /// object is used as the data object
+    /// object is used as the meta-data object
     /// </summary>
     internal class AbbrOperation
     {

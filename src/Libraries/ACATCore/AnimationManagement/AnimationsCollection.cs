@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AnimationsCollection.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,47 +18,11 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AnimationManagement
 {
@@ -127,7 +91,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
-        /// Load all the animations from the config file (from ACAT/Animations node)
+        /// Loads all the animations from the config file (from ACAT/Animations node)
         /// </summary>
         /// <param name="configFile">Name of the config file</param>
         /// <returns>true on success</returns>
@@ -181,7 +145,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 if (disposing)
                 {
                     // dispose all managed resources.
-                    foreach (Animations animations in _animationsTable.Values)
+                    foreach (var animations in _animationsTable.Values)
                     {
                         animations.Dispose();
                     }
@@ -197,10 +161,10 @@ namespace ACAT.Lib.Core.AnimationManagement
 
         /// <summary>
         /// Checks if there is already an entry for specified
-        /// screen.  If so returns it otherwise, creates a new one
+        /// scanner.  If so returns it otherwise, creates a new one
         /// </summary>
-        /// <param name="name">Name of the screen</param>
-        /// <returns>The animations object for the screen</returns>
+        /// <param name="name">Name of the panel</param>
+        /// <returns>The animations object for the panel</returns>
         private Animations findOrCreateAnimationsEntry(String name)
         {
             Animations animations = this[name];

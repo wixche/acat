@@ -1,7 +1,6 @@
-﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="PanelConfigMap.cs" company="Intel Corporation">
+﻿// <copyright file="PanelConfigMap.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,63 +17,38 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.AgentManagement;
+using ACAT.Lib.Core.UserManagement;
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Xml;
-using ACAT.Lib.Core.AgentManagement;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
     /// PanelConfigMap is an xml file that contains a mapping between the
     /// name of the class for the scanner and the name of the xml file that
-    /// contains animation and other info for the scanner.  By default, the
-    /// name of the class is used as the name of the xml file, but using
-    /// PanelConfigMap, the user can use it to map to any filename.  This
-    /// gives us a way to try out different animations for the same scanner.
+    /// contains animation and other info for the scanner.  This
+    /// allows for mapping different animation files to the same scanner (form).
+    /// For instance, a QWERTY layout alphabet scanner in English can have a different
+    /// layout of letters for anothe language like French.
     /// </summary>
     public class PanelConfigMap
     {
+        /// <summary>
+        /// Name of the panel class config file. This file contains a
+        /// list of panel configurations to use
+        /// </summary>
+        public static String PanelClassConfigFileName = "panelclassconfig.xml";
+
+        private const String DefaultCulture = "en";
+
         /// <summary>
         /// Name of the config file that has the mapping.  This is loaded from
         /// the user directory
@@ -82,128 +56,41 @@ namespace ACAT.Lib.Core.PanelManagement
         private const String PanelConfigMapFileName = "panelconfigmap.xml";
 
         /// <summary>
-        /// Maps a name of a scanner to the panelconfigmapentry
-        /// </summary>
-        private static readonly Dictionary<String, List<PanelConfigMapEntry>> _mapTable = new Dictionary<String, List<PanelConfigMapEntry>>();
-
-        /// <summary>
         /// Maps the name of a config file to the complete path of the file
         /// </summary>
-        private static readonly Dictionary<String, String> _configFileLocationMap = new Dictionary<String, String>();
+        private static Dictionary<String, Dictionary<String, String>> _configFileLocationMap;
+
+        private static Dictionary<String, List<Guid>> _cultureConfigIdMapTable;
+
+        private static Dictionary<String, PanelClassConfig> _culturePanelClassConfigMapTable;
 
         /// <summary>
         /// Caches the class Type of forms
         /// </summary>
-        private static readonly Hashtable _formsCache = new Hashtable();
+        private static Hashtable _formsCache;
+
+        private static Dictionary<String, String> _loadConfigFileLocationMap;
+        private static String _loadCulture;
+        private static List<Guid> _loadPanelConfigMapTable;
+        private static Dictionary<Guid, PanelConfigMapEntry> _masterPanelConfigMapTable;
 
         /// <summary>
-        /// Stores preferred config file names
+        /// Checks if two scanners are the same
         /// </summary>
-        private static readonly PreferredPanelConfig _preferredPanelConfig = new PreferredPanelConfig();
-
-        /// <summary>
-        /// Initializes a static instance of hte class
-        /// </summary>
-        static PanelConfigMap()
+        /// <param name="panel1">first scanner</param>
+        /// <param name="panel2">scanner to compare</param>
+        /// <returns>true if they are</returns>
+        public static bool AreEqual(String panel1, String panel2)
         {
-            _preferredPanelConfig.Load();
-        }
-
-        public static String[] PreferredPanelConfigNames
-        {
-            get
-            {
-                return _preferredPanelConfig.PreferredPanelConfigNames;
-            }
-
-            set
-            {
-                _preferredPanelConfig.PreferredPanelConfigNames = value;
-            }
-        }
-
-        /// <summary>
-        /// Walks the directories specified in extensionDir,
-        /// looks for DLL's, loads all the types and looks for
-        /// Types that are derived from IPanel (which is all the
-        /// scanners) and caches them
-        /// </summary>
-        /// <param name="extensionDirs">Directories to look</param>
-        /// <returns>true on success</returns>
-        public static bool Load(IEnumerable<String> extensionDirs)
-        {
-            foreach (string dir in extensionDirs)
-            {
-                String extensionDir = dir + "\\" + AgentManager.AppAgentsRootDir;
-                loadPanelConfigMap(extensionDir);
-
-                extensionDir = dir + "\\" + AgentManager.FunctionalAgentsRootDir;
-                loadPanelConfigMap(extensionDir);
-            }
-
-            foreach (string dir in extensionDirs)
-            {
-                String extensionDir = dir + "\\" + PanelManager.UiRootDir;
-                Log.Debug("LoadPanelConfigMap for " + extensionDir);
-                loadPanelConfigMap(extensionDir);
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Loads class Types from the specified assembly
-        /// </summary>
-        /// <param name="assembly">Assembly to load from</param>
-        /// <returns>true on success</returns>
-        public static bool Load(Assembly assembly)
-        {
-            bool retVal = loadTypesFromAssembly(assembly);
-            return retVal;
-        }
-
-        /// <summary>
-        /// Returns the config map for the specified scanner.  Looks up
-        /// the preferred config map first to see if there is a config
-        /// entry that has been specifically configured for the scanner.
-        /// If not, it looks up the map talbe
-        /// </summary>
-        /// <param name="panel">Name of the scanner</param>
-        /// <returns>Panel config map object</returns>
-        public static PanelConfigMapEntry GetPanelConfigMapEntry(String panel)
-        {
-            PanelConfigMapEntry retVal = null;
-            List<PanelConfigMapEntry> list = null;
-
-            _mapTable.TryGetValue(panel, out list);
-
-            if (list == null || list.Count <= 0)
-            {
-                return null;
-            }
-
-            var configName = _preferredPanelConfig.GetConfigName(panel);
-            if (!String.IsNullOrEmpty(configName))
-            {
-                retVal = findMapEntryInList(configName, list);
-            }
-
-            if (retVal == null)
-            {
-                retVal = findMapEntryInMapTable(configName);
-            }
-
-            if (retVal == null)
-            {
-                retVal = list[0];
-            }
-
-            return retVal;
+            return String.Compare(panel1, panel2, true) == 0;
         }
 
         /// <summary>
         /// Returns the name of the animation config file for the specified
-        /// scanner
+        /// scanner.  The GetPanelConfigMapEntry function first checks
+        /// the culture folder (if non-English is the current culture)
+        /// It it doesn't find it thre, it looks up
+        /// the English culture folder
         /// </summary>
         /// <param name="panelClass">scanner name/class</param>
         /// <returns>the animation config file name</returns>
@@ -220,62 +107,295 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Returns the config file for the specified Type that
-        /// represents a scanner
+        /// Returns the config id for the specified config name.  Returns
+        /// empty guid if not found.
         /// </summary>
-        /// <param name="type">Type of the scanner</param>
-        /// <returns>animation config file name</returns>
-        public static String GetConfigFileForScreen(Type type)
+        /// <param name="configName">the config name</param>
+        /// <returns>config id</returns>
+        public static Guid GetConfigIdForConfigName(String configName)
         {
-            String retVal = String.Empty;
-            String xmlFileName;
-
-            Log.Debug("Type: " + type.FullName);
-            Guid guid = GetFormId(type);
-            if (guid != Guid.Empty)
+            foreach (var panelConfigMapEntry in _masterPanelConfigMapTable.Values)
             {
-                Log.Debug(type + " has a guid " + guid);
-                xmlFileName = findConfigFileByGuid(guid);
-            }
-            else
-            {
-                Log.Debug(type + " does not have a guid. Checking type instead");
-                xmlFileName = findConfigFileByType(type);
-            }
-
-            if (String.IsNullOrEmpty(xmlFileName))
-            {
-                Log.Debug("Did not find config file for " + type + " in maptable");
-                xmlFileName = (type.Name + ".xml").ToLower();
-                Log.Debug("Checking for configFile " + xmlFileName + " in _configFileMap");
-                if (_configFileLocationMap.ContainsKey(xmlFileName))
+                if (String.Compare(configName, panelConfigMapEntry.ConfigName, true) == 0)
                 {
-                    retVal = _configFileLocationMap[xmlFileName];
-                    Log.Debug("Found " + xmlFileName + " location. It is " + retVal);
-                }
-                else
-                {
-                    Log.Debug("configFileMap does not have xmlfile " + xmlFileName);
+                    return panelConfigMapEntry.ConfigId;
                 }
             }
-            else
+
+            return Guid.Empty;
+        }
+
+        /// <summary>
+        /// Returns the panelclass config filename for the current culture
+        /// </summary>
+        /// <returns>the full file name</returns>
+        public static String GetCurrentCulturePanelClassConfigFile()
+        {
+            var fileName = Path.Combine(UserManager.CurrentUserDir, CultureInfo.DefaultThreadCurrentUICulture.Name, PanelClassConfigFileName);
+            if (!File.Exists(fileName))
             {
-                retVal = xmlFileName;
+                fileName = Path.Combine(UserManager.CurrentUserDir, CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, PanelClassConfigFileName);
             }
 
-            Log.Debug("For type " + type.Name + " config file is [" + retVal + "]");
+            return fileName;
+        }
+
+        /// <summary>
+        /// Returns the panelclass config file name for the default English language
+        /// </summary>
+        /// <returns>the full filename</returns>
+        public static String GetDefaultPanelClassConfigFileName()
+        {
+            return Path.Combine(UserManager.CurrentUserDir, DefaultCulture, PanelClassConfigFileName);
+        }
+
+        /// <summary>
+        /// Returns the default panelclasssconfig map for the app.
+        /// First checks the culture folder (for non-English) and
+        /// if it doesn't find it ther, looks up the default English
+        /// culture folder
+        /// </summary>
+        /// <returns>default panelclassconfigmap, null if not found</returns>
+        public static PanelClassConfigMap GetDefaultPanelConfig()
+        {
+            PanelClassConfig panelClassConfig;
+
+            if (_culturePanelClassConfigMapTable.TryGetValue(CultureInfo.DefaultThreadCurrentUICulture.Name, out panelClassConfig) ||
+                _culturePanelClassConfigMapTable.TryGetValue(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, out panelClassConfig) ||
+                _culturePanelClassConfigMapTable.TryGetValue(DefaultCulture, out panelClassConfig))
+            {
+                return panelClassConfig.GetDefaultClassConfigMap();
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the config map for the specified scanner. Looks at the
+        /// current culture and if not found , looks at English which is the
+        /// default
+        /// </summary>
+        /// <param name="panel">Name of the scanner</param>
+        /// <returns>Panel config map object</returns>
+        public static PanelConfigMapEntry GetPanelConfigMapEntry(String panel)
+        {
+            PanelConfigMapEntry retVal = getMapEntryFromPanelClassConfigMap(panel);
+
+            if (retVal == null)
+            {
+                retVal = getCultureConfigMapEntry(CultureInfo.DefaultThreadCurrentUICulture.Name, panel);
+                if (retVal == null)
+                {
+                    retVal = getCultureConfigMapEntry(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, panel);
+                }
+
+                if (retVal == null)
+                {
+                    retVal = getCultureConfigMapEntry(DefaultCulture, panel);
+                }
+            }
+
             return retVal;
         }
 
         /// <summary>
-        /// Checks if two scanners are the same
+        /// Returns the config map entry for the specified config id
         /// </summary>
-        /// <param name="panel1">first scanner</param>
-        /// <param name="panel2">scanner to compare</param>
-        /// <returns>true if they are</returns>
-        public static bool AreEqual(String panel1, String panel2)
+        /// <param name="configId">config id</param>
+        /// <returns>the panel config map entry object</returns>
+        public static PanelConfigMapEntry GetPanelConfigMapEntryForConfigId(Guid configId)
         {
-            return String.Compare(panel1, panel2, true) == 0;
+            return _masterPanelConfigMapTable.Values.FirstOrDefault(panelConfigMapEntry => Equals(panelConfigMapEntry.ConfigId, configId));
+        }
+
+        /// <summary>
+        /// Walks the directories specified in extensionDir,
+        /// looks for DLL's, loads all the types and looks for
+        /// Types that are derived from IPanel (which is all the
+        /// scanners) and caches them
+        /// </summary>
+        /// <param name="extensionDirs">Directories to look</param>
+        /// <returns>true on success</returns>
+        public static bool Load(IEnumerable<String> extensionDirs)
+        {
+            _culturePanelClassConfigMapTable = new Dictionary<string, PanelClassConfig>();
+
+            _masterPanelConfigMapTable = new Dictionary<Guid, PanelConfigMapEntry>();
+
+            loadPanelClassConfig(CultureInfo.DefaultThreadCurrentUICulture.Name);
+            loadPanelClassConfig(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName);
+            loadPanelClassConfig(DefaultCulture);
+
+            _cultureConfigIdMapTable = new Dictionary<string, List<Guid>>();
+
+            _configFileLocationMap = new Dictionary<string, Dictionary<string, string>>();
+
+            _formsCache = new Hashtable();
+
+            _loadCulture = DefaultCulture;
+
+            _loadPanelConfigMapTable = new List<Guid>();
+
+            _loadConfigFileLocationMap = new Dictionary<string, string>();
+
+            // first walk the extension directories
+            foreach (string dir in extensionDirs)
+            {
+                String extensionDir = dir + "\\" + AgentManager.AppAgentsRootDir;
+                load(extensionDir);
+
+                extensionDir = dir + "\\" + AgentManager.FunctionalAgentsRootDir;
+                load(extensionDir);
+
+                extensionDir = dir + "\\" + PanelManager.UiRootDir;
+                load(extensionDir);
+            }
+
+            // load the panels from the default culture (which is English)
+            var resourcesDir = FileUtils.GetDefaultResourcesDir();
+            Log.Debug("DefaultResourcesDir: " + resourcesDir);
+            load(resourcesDir);
+
+            _cultureConfigIdMapTable.Add(_loadCulture, _loadPanelConfigMapTable);
+
+            _configFileLocationMap.Add(_loadCulture, _loadConfigFileLocationMap);
+
+            if (!_cultureConfigIdMapTable.ContainsKey(CultureInfo.DefaultThreadCurrentUICulture.Name))
+            {
+                resourcesDir = Path.Combine(FileUtils.ACATPath, CultureInfo.DefaultThreadCurrentUICulture.Name);
+                if (Directory.Exists(resourcesDir))
+                {
+                    _loadCulture = CultureInfo.DefaultThreadCurrentUICulture.Name;
+
+                    _loadPanelConfigMapTable = new List<Guid>();
+
+                    _loadConfigFileLocationMap = new Dictionary<string, string>();
+
+                    Log.Debug("ResourcesDir: " + resourcesDir);
+                    load(resourcesDir);
+
+                    _cultureConfigIdMapTable.Add(_loadCulture, _loadPanelConfigMapTable);
+
+                    _configFileLocationMap.Add(_loadCulture, _loadConfigFileLocationMap);
+                }
+            }
+
+            // load for the current culture
+            if (!_cultureConfigIdMapTable.ContainsKey(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName))
+            {
+                resourcesDir = Path.Combine(FileUtils.ACATPath, CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName);
+                if (Directory.Exists(resourcesDir))
+                {
+                    _loadCulture = CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName;
+
+                    _loadPanelConfigMapTable = new List<Guid>();
+
+                    _loadConfigFileLocationMap = new Dictionary<string, string>();
+
+                    Log.Debug("ResourcesDir: " + resourcesDir);
+                    load(resourcesDir);
+
+                    _cultureConfigIdMapTable.Add(_loadCulture, _loadPanelConfigMapTable);
+
+                    _configFileLocationMap.Add(_loadCulture, _loadConfigFileLocationMap);
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Loads class Types from the specified assembly
+        /// </summary>
+        /// <param name="assembly">Assembly to load from</param>
+        /// <returns>true on success</returns>
+        public static bool Load(Assembly assembly)
+        {
+            if (_formsCache == null)
+            {
+                _formsCache = new Hashtable();
+            }
+
+            return loadTypesFromAssembly(assembly);
+        }
+
+        public static void Reset()
+        {
+            if (_cultureConfigIdMapTable != null)
+            {
+                _cultureConfigIdMapTable.Clear();
+                _cultureConfigIdMapTable = null;
+            }
+
+            if (_masterPanelConfigMapTable != null)
+            {
+                _masterPanelConfigMapTable.Clear();
+                _masterPanelConfigMapTable = null;
+            }
+
+            if (_configFileLocationMap != null)
+            {
+                _configFileLocationMap.Clear();
+                _configFileLocationMap = null;
+            }
+
+            if (_culturePanelClassConfigMapTable != null)
+            {
+                _culturePanelClassConfigMapTable.Clear();
+                _culturePanelClassConfigMapTable = null;
+            }
+
+            if (_formsCache != null)
+            {
+                _formsCache.Clear();
+                _formsCache = null;
+            }
+        }
+
+        /// <summary>
+        /// Sets the specified config name as the default config name
+        /// for the app.
+        /// </summary>
+        /// <param name="configName">name of the config</param>
+        /// <returns>true on success</returns>
+        public static bool SetDefaultPanelConfig(String configName)
+        {
+            bool retVal = true;
+
+            if (String.IsNullOrEmpty(configName))
+            {
+                return false;
+            }
+
+            PanelClassConfig panelClassConfig = null;
+
+            if (_culturePanelClassConfigMapTable.TryGetValue(CultureInfo.DefaultThreadCurrentUICulture.Name, out panelClassConfig) ||
+                _culturePanelClassConfigMapTable.TryGetValue(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, out panelClassConfig) ||
+                _culturePanelClassConfigMapTable.TryGetValue(DefaultCulture, out panelClassConfig))
+            {
+                retVal = panelClassConfig.SetDefaultClassConfigMap(configName);
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Adds the specified Type to the cache keyed by the Guid.
+        /// </summary>
+        /// <param name="guid">Guid for the scanner</param>
+        /// <param name="type">Scanner class Type</param>
+        internal static void AddFormToCache(Guid guid, Type type)
+        {
+            if (_formsCache.ContainsKey(guid))
+            {
+                Log.Debug("Form Type " + type.FullName + ", guid " + guid + " is already added");
+                return;
+            }
+
+            Log.Debug("Adding form " + type.FullName + ", guid " + guid + " to cache");
+            _formsCache.Add(guid, type);
+
+            updateFormTypeReferences(guid, type);
         }
 
         /// <summary>
@@ -287,33 +407,36 @@ namespace ACAT.Lib.Core.PanelManagement
             Log.Debug("Cleaning up panelConfigMap entries...");
 
             var removeList = new List<PanelConfigMapEntry>();
-            foreach (var list in _mapTable.Values)
+            foreach (var mapEntry in _masterPanelConfigMapTable.Values)
             {
-                foreach (var mapEntry in list)
+                Log.Debug("Looking up " + mapEntry.ToString());
+                if (_formsCache.ContainsKey(mapEntry.FormId))
                 {
-                    Log.Debug("Looking up " + mapEntry.ToString());
-                    if (_formsCache.ContainsKey(mapEntry.FormId))
-                    {
-                        mapEntry.FormType = (Type)_formsCache[mapEntry.FormId];
-                    }
+                    mapEntry.FormType = (Type)_formsCache[mapEntry.FormId];
+                }
 
-                    /*else if (_formsCache.ContainsKey(mapEntry.PanelName) && mapEntry.FormId.Equals(Guid.Empty))
-                    {
-                        mapEntry.FormType = (Type)_formsCache[mapEntry.PanelName];
-                    }
-                    */
-                    Log.IsNull("mapEntry.FormType ", mapEntry.FormType);
+                Log.IsNull("mapEntry.FormType ", mapEntry.FormType);
 
-                    if (mapEntry.FormType != null && _configFileLocationMap.ContainsKey(mapEntry.ConfigFileName))
-                    {
-                        Log.Debug("Yes. _configFileLocationMap has configfile " + mapEntry.ConfigFileName);
-                        mapEntry.ConfigFileName = _configFileLocationMap[mapEntry.ConfigFileName];
-                    }
-                    else
-                    {
-                        Log.Debug("No. _configFileLocationMap does not have configfile " + mapEntry.ConfigFileName);
-                        removeList.Add(mapEntry);
-                    }
+                var configFilePath = getConfigFilePathFromLocationMap(CultureInfo.DefaultThreadCurrentUICulture.Name, mapEntry.ConfigFileName);
+                if (String.IsNullOrEmpty(configFilePath))
+                {
+                    configFilePath = getConfigFilePathFromLocationMap(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, mapEntry.ConfigFileName);
+                }
+
+                if (String.IsNullOrEmpty(configFilePath))
+                {
+                    configFilePath = getConfigFilePathFromLocationMap(DefaultCulture, mapEntry.ConfigFileName);
+                }
+
+                if (mapEntry.FormType != null && !String.IsNullOrEmpty(configFilePath))
+                {
+                    Log.Debug("Yes. _configFileLocationMap has configfile " + mapEntry.ConfigFileName);
+                    mapEntry.ConfigFileName = configFilePath;
+                }
+                else
+                {
+                    Log.Debug("No. _configFileLocationMap does not have configfile " + mapEntry.ConfigFileName);
+                    removeList.Add(mapEntry);
                 }
             }
 
@@ -324,8 +447,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Gets the ACAT descriptor guid for the specifed
-        /// Type
+        /// Gets the ACAT descriptor guid for the specifed Type
         /// </summary>
         /// <param name="type">Scanner class Type</param>
         /// <returns>The descirptor guid</returns>
@@ -342,112 +464,107 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Adds the specified Type to the cache keyed by
-        /// the Guid.
-        /// </summary>
-        /// <param name="guid">Guid for the scanner</param>
-        /// <param name="type">Scanner class Type</param>
-        internal static void AddFormToCache(Guid guid, Type type)
-        {
-            if (_formsCache.ContainsKey(guid))
-            {
-                Log.Debug("Screen " + type.FullName + ", guid " + guid.ToString() + " is already added");
-                return;
-            }
-
-            Log.Debug("Adding screen " + type.FullName + ", guid " + guid.ToString() + " to cache");
-            _formsCache.Add(guid, type);
-
-            var mapEntry = new PanelConfigMapEntry(type.Name, type.Name, (type.Name + ".xml").ToLower(), guid, type);
-            Log.Debug("mapEntry.ConfigFileName: " + mapEntry.ConfigFileName);
-            addToMapTable(mapEntry);
-
-            updateFormTypeReferences(guid, type);
-        }
-
-        /// <summary>
         /// Adds the specified mapEntry object to the map table. Also
         /// looks up the map table if it already has the formID specified
         /// in the mapEntry and updates its config file name with the
         /// one in mapEntry
         /// </summary>
+        /// <param name="mapTable">Table to add to</param>
         /// <param name="mapEntry">map entry to add</param>
-        private static void addToMapTable(PanelConfigMapEntry mapEntry)
+        private static void addToMapTable(List<Guid> configIdTable, PanelConfigMapEntry mapEntry)
         {
-            if (!_mapTable.ContainsKey(mapEntry.PanelClass))
+            if (!configIdTable.Contains(mapEntry.ConfigId))
             {
-                _mapTable.Add(mapEntry.PanelClass, new List<PanelConfigMapEntry>());
+                configIdTable.Add(mapEntry.ConfigId);
             }
 
-            List<PanelConfigMapEntry> list = _mapTable[mapEntry.PanelClass];
-#if abc
-            foreach (var panelConfigMapEntry in list)
+            if (!_masterPanelConfigMapTable.ContainsKey(mapEntry.ConfigId))
             {
-                if (panelConfigMapEntry.FormId == mapEntry.FormId)
-                {
-                    panelConfigMapEntry.ConfigFileName = mapEntry.ConfigFileName;
-                    return;
-                }
+                _masterPanelConfigMapTable.Add(mapEntry.ConfigId, mapEntry);
             }
-#endif
-            Log.Debug("Adding " + mapEntry);
-            list.Add(mapEntry);
         }
 
         /// <summary>
-        /// Removes the specified map entry from the map table
+        /// Adds the specified type to the cache
         /// </summary>
-        /// <param name="entryToRemove">entry to remove</param>
-        private static void removeMapEntry(PanelConfigMapEntry entryToRemove)
+        /// <param name="type">scanner class Type</param>
+        private static void addTypeToCache(Type type)
         {
-            foreach (List<PanelConfigMapEntry> list in _mapTable.Values)
+            if (typeof(IPanel).IsAssignableFrom(type))
             {
-                foreach (PanelConfigMapEntry mapEntry in list)
+                var guid = GetFormId(type);
+                if (guid != Guid.Empty)
                 {
-                    if (mapEntry == entryToRemove)
+                    AddFormToCache(guid, type);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the panelClassConfigMapEntry object for the specified panel
+        /// and for the specifed culture
+        /// </summary>
+        /// <param name="language">the culture</param>
+        /// <param name="panelClass">panel class</param>
+        /// <returns>object, null if not found</returns>
+        private static PanelClassConfigMapEntry getClassConfigMapEntryForCulture(String language, String panelClass)
+        {
+            if (_culturePanelClassConfigMapTable.ContainsKey(language))
+            {
+                var panelClassConfig = _culturePanelClassConfigMapTable[language];
+
+                return panelClassConfig.GetDefaultClassConfigMapEntry(panelClass);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the fullpath to the config file for the specified culture
+        /// </summary>
+        /// <param name="language">culture</param>
+        /// <param name="configFile">config file</param>
+        /// <returns>full path, empty if not found</returns>
+        private static String getConfigFilePathFromLocationMap(String language, String configFile)
+        {
+            if (_configFileLocationMap.ContainsKey(language))
+            {
+                var map = _configFileLocationMap[language];
+
+                if (map.ContainsKey(configFile))
+                {
+                    return map[configFile];
+                }
+            }
+
+            return String.Empty;
+        }
+
+        /// <summary>
+        /// Returns the panelconfigmapentry for the specified panel class
+        /// for the specified language
+        /// </summary>
+        /// <param name="language">language</param>
+        /// <param name="panelClass">panel class</param>
+        /// <returns>object, null if not found</returns>
+        private static PanelConfigMapEntry getCultureConfigMapEntry(String language, String panelClass)
+        {
+            if (!_cultureConfigIdMapTable.ContainsKey(language))
+            {
+                return null;
+            }
+
+            List<Guid> configIds = _cultureConfigIdMapTable[language];
+
+            foreach (var configId in configIds)
+            {
+                if (_masterPanelConfigMapTable.ContainsKey(configId))
+                {
+                    var panelConfigMapEntry = _masterPanelConfigMapTable[configId];
+                    if (String.Compare(panelConfigMapEntry.PanelClass, panelClass, true) == 0)
                     {
-                        list.Remove(mapEntry);
-                        return;
+                        return panelConfigMapEntry;
                     }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Looks up the map table for the specified animation
-        /// config file and returns the map entry
-        /// </summary>
-        /// <param name="configName">name of the animation file</param>
-        /// <returns>the map entry</returns>
-        private static PanelConfigMapEntry findMapEntryInMapTable(String configName)
-        {
-            PanelConfigMapEntry retVal = null;
-            foreach (var list in _mapTable.Values)
-            {
-                retVal = findMapEntryInList(configName, list);
-                if (retVal != null)
-                {
-                    break;
-                }
-            }
-
-            return retVal;
-        }
-
-        /// <summary>
-        /// Finds the specified config file name in the list and returns
-        /// the map entry object that has the file name
-        /// </summary>
-        /// <param name="configName">name of the animation file</param>
-        /// <param name="list">list to look in</param>
-        /// <returns></returns>
-        private static PanelConfigMapEntry findMapEntryInList(String configName, IEnumerable<PanelConfigMapEntry> list)
-        {
-            foreach (var mapEntry in list)
-            {
-                if (String.Compare(configName, mapEntry.ConfigName, true) == 0)
-                {
-                    return mapEntry;
                 }
             }
 
@@ -455,51 +572,27 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Looks up the map table for the speified Scanner
-        /// Type and returns its animation config file name
+        /// Returns the PanelConfigMapEntry for the specified panel. Looks at
+        /// the current culture first and then the default (English) culture
         /// </summary>
-        /// <param name="type">scanner Type</param>
-        /// <returns>the animation config file name</returns>
-        private static String findConfigFileByType(Type type)
+        /// <param name="panelClass">panel class</param>
+        /// <returns>the object, null if not found</returns>
+        private static PanelConfigMapEntry getMapEntryFromPanelClassConfigMap(String panelClass)
         {
-            String retVal = String.Empty;
-            foreach (List<PanelConfigMapEntry> list in _mapTable.Values)
+            var panelClassConfigMapEntry = (getClassConfigMapEntryForCulture(CultureInfo.DefaultThreadCurrentUICulture.Name, panelClass) ??
+                                            getClassConfigMapEntryForCulture(CultureInfo.DefaultThreadCurrentUICulture.TwoLetterISOLanguageName, panelClass)) ??
+                                           getClassConfigMapEntryForCulture(DefaultCulture, panelClass);
+
+            if (panelClassConfigMapEntry == null)
             {
-                foreach (PanelConfigMapEntry mapEntry in list)
-                {
-                    if (mapEntry.ConfigName == type.Name)
-                    {
-                        retVal = mapEntry.ConfigFileName;
-                        break;
-                    }
-                }
+                return null;
             }
 
-            return retVal;
-        }
+            var configId = panelClassConfigMapEntry.ConfigId;
 
-        /// <summary>
-        /// Looks up the map table for the specified
-        /// scanner guid and returns the animation config file
-        /// </summary>
-        /// <param name="guid">the scanner guid</param>
-        /// <returns>animation config file name</returns>
-        private static String findConfigFileByGuid(Guid guid)
-        {
-            String retVal = String.Empty;
-            foreach (List<PanelConfigMapEntry> list in _mapTable.Values)
-            {
-                foreach (PanelConfigMapEntry mapEntry in list)
-                {
-                    if (Guid.Equals(guid, mapEntry.FormId))
-                    {
-                        retVal = mapEntry.ConfigFileName;
-                        break;
-                    }
-                }
-            }
-
-            return retVal;
+            return (_masterPanelConfigMapTable.ContainsKey(configId))
+                            ? _masterPanelConfigMapTable[configId]
+                            : null;
         }
 
         /// <summary>
@@ -508,11 +601,98 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         /// <param name="dir">Directory to walk</param>
         /// <param name="resursive">Recursively search?</param>
-        private static void loadPanelConfigMap(String dir, bool resursive = true)
+        private static void load(String dir, bool resursive = true)
         {
-            var walker = new DirectoryWalker(dir, "*.*");
-            Log.Debug("Walking dir " + dir);
-            walker.Walk(new OnFileFoundDelegate(onFileFound));
+            if (Directory.Exists(dir))
+            {
+                var walker = new DirectoryWalker(dir, "*.*");
+                Log.Debug("Walking dir " + dir);
+                walker.Walk(new OnFileFoundDelegate(onFileFound));
+            }
+        }
+
+        /// <summary>
+        /// For this application, load the panel configurations to use from
+        /// the panelclassconfig.xml file
+        /// </summary>
+        /// <param name="language"></param>
+        private static void loadPanelClassConfig(String language)
+        {
+            var panelClassConfigFilePath = Path.Combine(UserManager.CurrentUserDir, language, PanelClassConfigFileName);
+
+            if (File.Exists(panelClassConfigFilePath) && !_culturePanelClassConfigMapTable.ContainsKey(language))
+            {
+                var appPanelClassConfig = AppPanelClassConfig.Load<AppPanelClassConfig>(panelClassConfigFilePath);
+
+                var panelClassConfig = appPanelClassConfig.Find(CoreGlobals.AppPreferences.AppId);
+
+                //var panelClassConfig = PanelClassConfig.Load<PanelClassConfig>(panelClassConfigFilePath);//
+                if (panelClassConfig != null && panelClassConfig.PanelClassConfigMaps.Count > 0)
+                {
+                    _culturePanelClassConfigMapTable.Add(language, panelClassConfig);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Loads relevant types from the assembly and caches them
+        /// </summary>
+        /// <param name="assembly">name of the assembly</param>
+        /// <returns>true on success</returns>
+        private static bool loadTypesFromAssembly(Assembly assembly)
+        {
+            bool retVal = true;
+
+            if (assembly == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                foreach (Type type in assembly.GetTypes())
+                {
+                    addTypeToCache(type);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex.ToString());
+                retVal = false;
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// Found a DLL.  Load the class Types of all the relevant classes
+        /// from the DLL
+        /// </summary>
+        /// <param name="dllName">name of the dll</param>
+        private static void onDllFound(String dllName)
+        {
+            try
+            {
+                Log.Debug("Found dll " + dllName);
+                if (dllName.ToLower().Contains("scanners.dll"))
+                {
+                    Log.Debug("HAHA");
+                }
+                loadTypesFromAssembly(Assembly.LoadFile(dllName));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("Could get types from assembly " + dllName + ". Exception : " + ex);
+                if (ex is ReflectionTypeLoadException)
+                {
+                    var typeLoadException = (ReflectionTypeLoadException)ex;
+                    var exceptions = typeLoadException.LoaderExceptions;
+                    foreach (var e in exceptions)
+                    {
+                        Log.Debug("Loader exception: " + e);
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -525,9 +705,10 @@ namespace ACAT.Lib.Core.PanelManagement
         {
             String filePath = file.ToLower();
             String fileName = Path.GetFileName(filePath);
+
             if (String.Compare(fileName, PanelConfigMapFileName, true) == 0)
             {
-                onScreenConfigFileFound(filePath);
+                onPanelConfigMapFileFound(filePath);
             }
             else
             {
@@ -551,7 +732,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// from the file.
         /// </summary>
         /// <param name="configFileName">full path to the config file</param>
-        private static void onScreenConfigFileFound(String configFileName)
+        private static void onPanelConfigMapFileFound(String configFileName)
         {
             try
             {
@@ -567,7 +748,7 @@ namespace ACAT.Lib.Core.PanelManagement
                     var mapEntry = new PanelConfigMapEntry();
                     if (mapEntry.Load(node))
                     {
-                        addToMapTable(mapEntry);
+                        addToMapTable(_loadPanelConfigMapTable, mapEntry);
                     }
                 }
             }
@@ -585,79 +766,22 @@ namespace ACAT.Lib.Core.PanelManagement
         private static void onXmlFileFound(String xmlFileName)
         {
             String fileName = Path.GetFileName(xmlFileName).ToLower();
-            if (!_configFileLocationMap.ContainsKey(fileName))
+            if (!_loadConfigFileLocationMap.ContainsKey(fileName))
             {
                 Log.Debug("Adding xmlfile " + fileName + ", fullPath: " + xmlFileName);
-                _configFileLocationMap.Add(fileName.ToLower(), xmlFileName);
+                _loadConfigFileLocationMap.Add(fileName.ToLower(), xmlFileName);
             }
         }
 
         /// <summary>
-        /// Found a DLL.  Load the class Types of all the relevant classes
-        /// from the DLL
+        /// Removes the specified map entry from the map table
         /// </summary>
-        /// <param name="dllName">name of the dll</param>
-        private static void onDllFound(String dllName)
+        /// <param name="entryToRemove">entry to remove</param>
+        private static void removeMapEntry(PanelConfigMapEntry entryToRemove)
         {
-            try
+            if (_masterPanelConfigMapTable.ContainsKey(entryToRemove.ConfigId))
             {
-                Log.Debug("Found dll " + dllName);
-                Assembly screenAssembly = Assembly.LoadFile(dllName);
-                loadTypesFromAssembly(screenAssembly);
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Could get types from assembly " + dllName + ". Exception : " + ex);
-                if (ex is ReflectionTypeLoadException)
-                {
-                    var typeLoadException = (ReflectionTypeLoadException)ex;
-                    var exceptions = typeLoadException.LoaderExceptions;
-                    foreach (var e in exceptions)
-                    {
-                        Log.Debug("Loader exception: " + e);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Loads relevant types from the assembly and caches them
-        /// </summary>
-        /// <param name="assembly">name of the assembly</param>
-        /// <returns>true on success</returns>
-        private static bool loadTypesFromAssembly(Assembly assembly)
-        {
-            bool retVal = true;
-
-            try
-            {
-                foreach (Type type in assembly.GetTypes())
-                {
-                    addTypeToCache(type);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug(ex.ToString());
-                retVal = false;
-            }
-
-            return retVal;
-        }
-
-        /// <summary>
-        /// Adds the specified type to the cache
-        /// </summary>
-        /// <param name="type">scanner class Type</param>
-        private static void addTypeToCache(Type type)
-        {
-            if (typeof(IPanel).IsAssignableFrom(type))
-            {
-                var guid = GetFormId(type);
-                if (guid != Guid.Empty)
-                {
-                    AddFormToCache(guid, type);
-                }
+                _masterPanelConfigMapTable.Remove(entryToRemove.ConfigId);
             }
         }
 
@@ -670,14 +794,11 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <param name="type">Scanner Type</param>
         private static void updateFormTypeReferences(Guid guid, Type type)
         {
-            foreach (var list in _mapTable.Values)
+            foreach (var panelConfigMapEntry in _masterPanelConfigMapTable.Values)
             {
-                foreach (var panelConfigMapEntry in list)
+                if (panelConfigMapEntry.FormType == null && panelConfigMapEntry.FormId.Equals(guid))
                 {
-                    if (panelConfigMapEntry.FormType == null && panelConfigMapEntry.FormId.Equals(guid))
-                    {
-                        panelConfigMapEntry.FormType = type;
-                    }
+                    panelConfigMapEntry.FormType = type;
                 }
             }
         }

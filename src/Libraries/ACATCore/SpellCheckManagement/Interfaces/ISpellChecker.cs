@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ISpellChecker.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Diagnostics.CodeAnalysis;
-using ACAT.Lib.Core.Utility;
+using System.Globalization;
 
 #region SupressStyleCopWarnings
 
@@ -60,10 +61,7 @@ using ACAT.Lib.Core.Utility;
 namespace ACAT.Lib.Core.SpellCheckManagement
 {
     /// <summary>
-    /// Interface to Word prediction engines.  A word predictor predicts
-    /// the next word using the previous n-words as context.  Some word predictors
-    /// also support learning where the engine tunes its internal model for
-    /// more accurate predictions based on the user.
+    /// Interface to Spellcheckers
     /// </summary>
     public interface ISpellChecker : IDisposable
     {
@@ -74,23 +72,11 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         IDescriptor Descriptor { get; }
 
         /// <summary>
-        /// Returns a dialog interface that the application will display to the user
-        /// to change settings that are specific to the word predictor
+        /// Initialize the spell checker
         /// </summary>
-        /// <returns>The setttings dialog</returns>
-        ISpellCheckerSettingsDialog SettingsDialog { get; }
-
-        /// <summary>
-        /// Returns a flag to indicate whether the word predictor supports a settings
-        /// dialog.  true if it does, false if it doesn't
-        /// </summary>
-        bool SupportsSettingsDialog { get; }
-
-        /// <summary>
-        /// Initialize the word predictor.
-        /// </summary>
+        /// <param name="ci">Language for the spellchecker</param>
         /// <returns>true on success, false on failure</returns>
-        bool Init();
+        bool Init(CultureInfo ci);
 
         /// <summary>
         /// Reset to factory default settings
@@ -114,5 +100,10 @@ namespace ACAT.Lib.Core.SpellCheckManagement
         /// <param name="configFileDirectory">Directory where the settings are stored</param>
         /// <returns>true on success, false on failure</returns>
         bool SaveSettings(String configFileDirectory);
+
+        /// <summary>
+        /// Uninitializes
+        /// </summary>
+        void Uninit();
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
-// <copyright file="ThemeManagement.cs" company="Intel Corporation">
+// <copyright file="ThemeManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.ThemeManagement
 {
@@ -74,19 +38,24 @@ namespace ACAT.Lib.Core.ThemeManagement
     public class ThemeManager : IDisposable
     {
         /// <summary>
+        /// Name of the default theme
+        /// </summary>
+        public const String DefaultThemeName = "Default";
+
+        /// <summary>
+        /// Mapping between the Theme name and the directory
+        /// </summary>
+        public readonly Dictionary<String, String> ThemesLookupTable = new Dictionary<String, String>();
+
+        /// <summary>
         ///  Theme config file name
         /// </summary>
-        private const String ThemeConfigFileName = "Skin.xml";
+        private const String ThemeConfigFileName = "Theme.xml";
 
         /// <summary>
         /// Returns the singleton instance
         /// </summary>
         private static readonly ThemeManager _instance = new ThemeManager();
-
-        /// <summary>
-        /// Mapping between the Theme name and the directory
-        /// </summary>
-        private readonly Dictionary<String, String> _themesLookupTable = new Dictionary<String, String>();
 
         /// <summary>
         /// The current active ksin
@@ -103,13 +72,13 @@ namespace ACAT.Lib.Core.ThemeManagement
         /// </summary>
         private ThemeManager()
         {
-            ActiveThemeName = "DefaultSkin";
+            ActiveThemeName = DefaultThemeName;
             DefaultTheme = Theme.Create(ActiveThemeName);
             _activeTheme = Theme.Create(ActiveThemeName);
         }
 
         /// <summary>
-        /// The default Theme
+        /// Gets or sets the default theme
         /// </summary>
         public static Theme DefaultTheme { get; set; }
 
@@ -134,12 +103,20 @@ namespace ACAT.Lib.Core.ThemeManagement
         }
 
         /// <summary>
-        /// Gets the name of the currently active  Theme
+        /// Gets the name of the currently active theme
         /// </summary>
         public String ActiveThemeName
         {
             get;
             private set;
+        }
+
+        /// <summary>
+        /// Ges a list of thems discovered
+        /// </summary>
+        public IEnumerable<String> Themes
+        {
+            get { return ThemesLookupTable.Keys; }
         }
 
         /// <summary>
@@ -154,18 +131,42 @@ namespace ACAT.Lib.Core.ThemeManagement
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Gets the directory of the specified theme.
+        /// Return empty string if theme invalid.
+        /// </summary>
+        /// <param name="theme">theme</param>
+        /// <returns>theme diretory</returns>
+        public String GetThemeDir(String theme)
+        {
+            foreach (var key in ThemesLookupTable.Keys)
+            {
+                if (String.Compare(key, theme, true) == 0)
+                {
+                    return ThemesLookupTable[key];
+                }
+            }
+
+            return String.Empty;
+        }
+
+        /// <summary>
+        /// Initializes the theme manager.  Walks the
+        /// themes root dir.
+        /// </summary>
+        /// <returns></returns>
         public bool Init()
         {
-            String userSkinsDir = FileUtils.GetUserSkinsDir();
+            String userThemesDir = FileUtils.GetUserThemesDir();
 
             DirectoryWalker walker;
-            if (Directory.Exists(userSkinsDir))
+            if (Directory.Exists(userThemesDir))
             {
-                walker = new DirectoryWalker(userSkinsDir);
+                walker = new DirectoryWalker(userThemesDir);
                 walker.Walk(new OnDirectoryFoundDelegate(onDirFound));
             }
 
-            walker = new DirectoryWalker(FileUtils.GetSkinsDir());
+            walker = new DirectoryWalker(FileUtils.GetThemesDir());
             walker.Walk(new OnDirectoryFoundDelegate(onDirFound));
             return true;
         }
@@ -179,17 +180,21 @@ namespace ACAT.Lib.Core.ThemeManagement
         public bool SetActiveTheme(String name)
         {
             bool retVal = true;
-            var themeName = name.ToLower();
-            Log.Debug("Set active Theme to " + themeName);
+            Log.Debug("Set active Theme to " + name);
 
-            if (!_themesLookupTable.ContainsKey(themeName))
+            var themeDir = GetThemeDir(name);
+            if (String.IsNullOrEmpty(themeDir))
             {
-                Log.Debug("Could not find Theme " + themeName + " in the table");
-                return false;
-            }
-            Log.Debug("Found Theme " + themeName + " in the table");
+                Log.Debug("Could not find Theme " + name + ", using default");
+                themeDir = GetThemeDir(DefaultThemeName);
+                if (String.IsNullOrEmpty(themeDir))
+                {
+                    return false;
+                }
 
-            var themeDir = _themesLookupTable[themeName];
+                name = DefaultThemeName;
+            }
+
             var themeFile = Path.Combine(themeDir, ThemeConfigFileName);
 
             Log.Debug("Creating Theme " + name + ", themeDir: " + themeDir);
@@ -213,6 +218,7 @@ namespace ACAT.Lib.Core.ThemeManagement
                 Log.Debug("Error creating Theme");
                 retVal = false;
             }
+
             return retVal;
         }
 
@@ -263,11 +269,11 @@ namespace ACAT.Lib.Core.ThemeManagement
             Log.Debug("Found Theme in  " + dirName);
 
             var components = dirName.Split('\\');
-            var themeName = components[components.Length - 1].ToLower();
-            if (!_themesLookupTable.ContainsKey(themeName))
+            var themeName = components[components.Length - 1];
+            if (!ThemesLookupTable.ContainsKey(themeName))
             {
-                Log.Debug("Adding Theme: " + themeName + ", skinDir: " + dirName);
-                _themesLookupTable.Add(themeName.ToLower(), dirName);
+                Log.Debug("Adding Theme: " + themeName + ", themeDir: " + dirName);
+                ThemesLookupTable.Add(themeName, dirName);
             }
         }
     }

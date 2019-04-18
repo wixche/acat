@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="PresageWordPredictor.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,197 +18,77 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using ACAT.Extensions.Default.WordPredictors.Presage.PresageService;
+using ACAT.Extensions.Default.WordPredictors.PresageBase;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
-using ACAT.Lib.Core.WordPredictionManagement;
-using ACAT.Lib.Extension;
-using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 
-namespace ACAT.Extensions.Default.WordPredictors.PresageWCF
+namespace ACAT.Extensions.Default.WordPredictors.Neutral.Presage
 {
     /// <summary>
     /// The Word Predictor that uses the Presage word predictor
-    /// for next word prediction. Presage is an intelligent predictive 
-    /// text engine created by Matteo Vescovi. 
+    /// for next word prediction. Presage is an intelligent predictive
+    /// text engine created by Matteo Vescovi.
+    /// This is the culture independent version and looks for the
+    /// presage database file (database.db) in the lanugage folder.
     /// http://presage.sourceforge.net/
     /// </summary>
-    [DescriptorAttribute("1495D4A3-29AD-471F-9FD3-46EC92171AF2",
-                            "Presage Word Predictor",
-                            "Word prediction engine based on Presage")]
-    public class PresageWordPredictor : IWordPredictor
+    [DescriptorAttribute("3F12555B-175C-45D8-93B8-60EAAE6705C8",
+                            "Presage Word Predictor (Generic)",
+                            "Generic Word predictor based on Presage intelligent predictive text engine")]
+    public class PresageWordPredictor : PresageWordPredictorBase
     {
-        private const String PresageProcessName = "presage_wcf_service_system_tray";
-
-        private const String PresageWCFTrayAppName = "presage_wcf_service_system_tray.exe";
-
         /// <summary>
         /// Name of the preferences file
         /// </summary>
         private const String SettingsFileName = "PresageWordPredictorSettings.xml";
 
         /// <summary>
-        /// The input text buffer
+        /// Settings for this extension
         /// </summary>
-        private string _inputText = "";
+        private Settings _settings;
 
         /// <summary>
-        /// The Presage object
+        /// Initializes and instance of the class
         /// </summary>
-        private PresageClient _presage;
-
-        /// <summary>
-        /// Word prediction settings object
-        /// </summary>
-        private Settings _presageSettings;
-
-        /// <summary>
-        /// Returns the ACAT descriptor for this class
-        /// </summary>
-        public IDescriptor Descriptor
+        public PresageWordPredictor()
         {
-            get { return DescriptorAttribute.GetDescriptor(GetType()); }
+            var ci = CultureInfo.DefaultThreadCurrentUICulture;
+            var settingsFilePath = (ci == null) ?
+                                    UserManager.GetFullPath(SettingsFileName) :
+                                    getUserRelativePath(ci.TwoLetterISOLanguageName, SettingsFileName, true);
+
+            Settings.PreferencesFilePath = settingsFilePath;
+
+            _settings = Settings.Load();
+
+            DatabaseFileName = _settings.DatabaseFileName;
+
+            LearningDBFileName = _settings.LearningDatabaseFileName;
+
+            presageSettings = _settings;
         }
 
         /// <summary>
-        /// Get or sets the value to indicate whether punctuations
-        /// should be filtered.
-        /// This property is not used.
+        /// Returns the default preferences object for the word predictor
         /// </summary>
-        public bool FilterPunctuationsEnable { get; set; }
-
-        /// <summary>
-        /// Gets or sets the NGram for word prediction.
-        /// Not used
-        /// </summary>
-        public int NGram
+        /// <returns>default preferences object</returns>
+        public override IPreferences GetDefaultPreferences()
         {
-            get { return -1; }
-
-            set { }
+            return PreferencesBase.LoadDefaults<Settings>();
         }
 
         /// <summary>
-        /// Gets or sets the number of words in the suggested
-        /// prediction list.
+        /// Returns the preferences object for the word predictor
         /// </summary>
-        public int PredictionWordCount
+        /// <returns>preferences object</returns>
+        public override IPreferences GetPreferences()
         {
-            get
-            {
-                int result = -1;
-
-                try
-                {
-                    var configValue = _presage.get_config("Presage.Selector.SUGGESTIONS");
-                    result = Convert.ToInt32(configValue);
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex);
-                }
-
-                return result;
-            }
-
-            set
-            {
-                try
-                {
-                    _presage.set_config("Presage.Selector.SUGGESTIONS", value.ToString());
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets the settings dialog for this engine.
-        /// Not used
-        /// </summary>
-        public IWordPredictorSettingsDialog SettingsDialog
-        {
-            get { return null; }
-        }
-
-        /// <summary>
-        /// Gets value that indicates whether this word
-        /// predictor supports learning.  Returns true.
-        /// The Learn() function can be called to add
-        /// sentences to the user's word prediction
-        /// model for better word prediction.
-        /// </summary>
-        public bool SupportsLearning
-        {
-            get { return true; }
-        }
-
-        /// <summary>
-        /// Gets whether it supports a settings dialog
-        /// Returns false always.
-        /// </summary>
-        public bool SupportsSettingsDialog
-        {
-            get { return false; }
-        }
-
-        /// <summary>
-        /// Disposer for this class
-        /// </summary>
-        public void Dispose()
-        {
-        }
-
-        /// <summary>
-        /// Performs initialization.  Must be called first.
-        /// Sets word prediction parameters and initializes Presage
-        /// </summary>
-        /// <returns>true on success</returns>
-        public bool Init()
-        {
-            bool retVal = false;
-
-            try
-            {
-                Attributions.Add("PRESAGE",
-                                "Predictive text functionality is powered by Presage, the " +
-                                "intelligent predictive text engine created by Matteo Vescovi. " +
-                                "(http://presage.sourceforge.net/)");
-
-                Settings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
-
-                _presageSettings = Settings.Load();
-
-                if (_presageSettings.StartPresageIfNotRunning)
-                {
-                    checkAndRunPresage();
-                }
-
-                retVal = initPresage();
-                if (!retVal)
-                {
-                    // failure mostly means the presage config file has an
-                    // incorrect database path.  Delete the config file so
-                    // it will regenerate and then we can insert the correct
-                    // database path when we init again
-                    deletePresageConfigFile();
-                    retVal = initPresage();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Error initializing Presage. " + ex);
-            }
-
-            return retVal;
+            return _settings;
         }
 
         /// <summary>
@@ -218,64 +98,21 @@ namespace ACAT.Extensions.Default.WordPredictors.PresageWCF
         /// </summary>
         /// <param name="text">Text to add</param>
         /// <returns>true on success</returns>
-        public bool Learn(String text)
+        protected override bool learn(String text)
         {
             bool result = false;
 
-            if (Common.AppPreferences.EnableWordPredictionDynamicModel)
+            try
             {
-                try
-                {
-                    _presage.learn(text);
-                    result = true;
-                }
-                catch (Exception ex)
-                {
-                    Log.Exception(ex);
-                }
+                presage.learn(_settings.UseDefaultEncoding ? UTF8EncodingToDefault(text) : text);
+                result = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Exception(ex);
             }
 
             return result;
-        }
-
-        /// <summary>
-        /// Loads the text into a temporary context.
-        /// This could for instance be the text from a notepad
-        /// or word document.  This makes word prediction more
-        /// contextual to the document being edited.  Call
-        /// UnloadContext to unload it.
-        ///
-        /// This function is not currently supported.
-        /// </summary>
-        /// <param name="text">Text to add to the context</param>
-        /// <returns>a handle</returns>
-        public int LoadContext(String text)
-        {
-            // not supported
-
-            return -1;
-        }
-
-        /// <summary>
-        /// Returns factory default settings.
-        /// </summary>
-        /// <returns></returns>
-        public bool LoadDefaultSettings()
-        {
-            updateSettings(new ACATPreferences());
-            return true;
-        }
-
-        /// <summary>
-        /// Loads settings from the specified file and sets
-        /// properties from the settings file.
-        /// </summary>
-        /// <param name="settingsFilePath">path to the settings file</param>
-        /// <returns>true on success</returns>
-        public bool LoadSettings(String settingsFilePath)
-        {
-            updateSettings(Common.AppPreferences);
-            return true;
         }
 
         /// <summary>
@@ -285,168 +122,71 @@ namespace ACAT.Extensions.Default.WordPredictors.PresageWCF
         /// </summary>
         /// <param name="prevWords">Previous words in the sentence</param>
         /// <param name="currentWord">current word (may be partially spelt out</param>
+        /// <param name="success">true if the function was successsful</param>
         /// <returns>A list of predicted words</returns>
-        public IEnumerable<String> Predict(String prevWords, String currentWord)
+        protected override IEnumerable<String> predict(String prevWords, String currentWord, ref bool success)
         {
-            // update the internal buffer with prevWords + currentWord
-            _inputText = prevWords + " " + currentWord;
-            Log.Debug("[" + _inputText + "]");
+            Log.Debug("Predict for: " + prevWords + " " + currentWord);
 
-            List<string> retVal;
+            var retVal = new List<string>();
+
+            success = true;
 
             try
             {
-                string[] prediction = _presage.predict(prevWords, currentWord);
-                retVal = prediction.ToList();
+                if (_settings.UseDefaultEncoding)
+                {
+                    prevWords = UTF8EncodingToDefault(prevWords);
+                    currentWord = UTF8EncodingToDefault(currentWord);
+                }
+
+                string[] prediction = presage.predict(prevWords, currentWord);
+
+                for (int ii = 0; ii < prediction.Length; ii++)
+                {
+                    if (_settings.UseDefaultEncoding)
+                    {
+                        prediction[ii] = defaultEncodingToUTF8(prediction[ii]);
+                    }
+
+                    if (!String.IsNullOrEmpty(_settings.FilterChars))
+                    {
+                        prediction[ii] = filterChars(prediction[ii]);
+                    }
+                }
+
+                var predictionList = prediction.ToList();
+
+                for (int count = 0, ii = 0; count < PredictionWordCount && ii < predictionList.Count(); ii++)
+                {
+                    if (matchPrefix(currentWord, predictionList[ii]))
+                    {
+                        //Log.Debug(String.Format("Prediction["+ ii + "] = " + predictions[ii].Term));
+                        retVal.Add(predictionList[ii]);
+                        count++;
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Log.Exception(ex);
+                success = false;
+                Log.Debug("Presage Predict Exception " + ex);
                 retVal = new List<string>();
             }
-            return retVal;
-        }
-
-        /// <summary>
-        /// Save the word predictor settings to a file that is maintained
-        /// by the word predictor.
-        /// </summary>
-        /// <param name="settingsFilePath">Directory where the settings are stored</param>
-        /// <returns>true on success, false on failure</returns>
-        public bool SaveSettings(String settingsFilePath)
-        {
-            updateSettings(Common.AppPreferences);
-            return true;
-        }
-
-        /// <summary>
-        /// Unloads previously loaded context (see LoadContext).
-        /// Not used.
-        /// </summary>
-        /// <param name="contextHandle">the handle</param>
-        public void UnloadContext(int contextHandle)
-        {
-            // not supported
-        }
-
-        private void checkAndRunPresage()
-        {
-            if (!isPresageRunning())
-            {
-                runPresage();
-            }
-        }
-
-        /// <summary>
-        /// Deletes the presage.xml file that is in the users folder.
-        /// </summary>
-        private void deletePresageConfigFile()
-        {
-            var presageDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "\\.presage";
-            var presageFile = presageDir + "\\presage.xml";
-            if (File.Exists(presageFile))
-            {
-                File.Delete(presageFile);
-            }
-        }
-
-        /// <summary>
-        /// Returns the install dir of the Presage word predictor
-        /// </summary>
-        /// <returns>dir, empty string if not installed</returns>
-        private string getPresageInstallDir()
-        {
-            string result;
-
-            try
-            {
-                result = Registry.GetValue("HKEY_CURRENT_USER\\Software\\Presage", "", string.Empty).ToString();
-            }
-            catch
-            {
-                result = string.Empty;
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Initializes the Presage word prediction engine.
-        /// </summary>
-        /// <returns>true on success</returns>
-        private bool initPresage()
-        {
-            bool retVal = true;
-
-            try
-            {
-                var presageDataDir = UserManager.GetFullPath("WordPredictors\\Presage");
-
-                _presage = new PresageClient();
-
-                var dbFileName = Path.Combine(presageDataDir, _presageSettings.DatabaseFileName);
-                _presage.set_config("Presage.Predictors.DefaultSmoothedNgramPredictor.DBFILENAME", dbFileName);
-
-                dbFileName = Path.Combine(presageDataDir, _presageSettings.LearningDatabaseFileName);
-                _presage.set_config("Presage.Predictors.UserSmoothedNgramPredictor.DBFILENAME", dbFileName);
-
-                _presage.set_config("Presage.Selector.REPEAT_SUGGESTIONS", "yes");
-                _presage.set_config("Presage.ContextTracker.ONLINE_LEARNING", "no");
-                _presage.save_config();
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Presage init error " + ex);
-                retVal = false;
-            }
 
             return retVal;
         }
 
         /// <summary>
-        /// Checks if Presage wcf tray app is running
+        /// Remove unnecessary chars
         /// </summary>
-        /// <returns>true if it is</returns>
-        private bool isPresageRunning()
+        /// <param name="input">input string</param>
+        /// <returns>filtered string</returns>
+        private String filterChars(String input)
         {
-            var pname = Process.GetProcessesByName(PresageProcessName);
-            return pname.Length != 0;
-        }
+            var removedChars = input.Select(ch => _settings.FilterChars.Contains(ch) ? (char?)null : ch);
 
-        /// <summary>
-        /// Runs the Presage WCF tray app
-        /// </summary>
-        private void runPresage()
-        {
-            var installDir = getPresageInstallDir();
-            if (String.IsNullOrEmpty(installDir))
-            {
-                return;
-            }
-
-            var fullPath = Path.Combine(installDir + "\\bin", PresageWCFTrayAppName);
-            Log.Debug(fullPath);
-            try
-            {
-                Process.Start(fullPath);
-                Thread.Sleep(3000);
-            }
-            catch (Exception ex)
-            {
-                Log.Debug("Unable to run Presage. " + ex);
-            }
-        }
-
-        /// <summary>
-        /// Updates class variables with ACAT settings stored
-        /// in prefs
-        /// </summary>
-        /// <param name="prefs">ACAT settings</param>
-        private void updateSettings(ACATPreferences prefs)
-        {
-            PredictionWordCount = prefs.WordPredictionCount;
-            FilterPunctuationsEnable = prefs.WordPredictionFilterPunctuations;
-            NGram = prefs.WordPredictionNGram;
+            return string.Concat(removedChars.ToArray());
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="MSWordTextControlAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,63 +18,34 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.AgentManagement;
+using ACAT.Lib.Core.AgentManagement.TextInterface;
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
-using ACAT.Lib.Core.AgentManagement;
-using ACAT.Lib.Core.AgentManagement.TextInterface;
-using ACAT.Lib.Core.Utility;
 using Word = Microsoft.Office.Interop.Word;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Extension.AppAgents.MSWord
 {
     /// <summary>
     /// Text control agent class for MS word. Handles all editing
     /// functions and navigating through the document.  Uses the
-    /// Office Interop API to interface with Word.
+    /// Office Interop API to interface with Word, track the caret
+    /// position, get text from the document, navigate through the document
+    /// etc.
     /// </summary>
     public class MSWordTextControlAgent : TextControlAgentBase
     {
+        /// <summary>
+        /// Automatically unprotect word docs when opened
+        /// </summary>
+        internal bool autoUnprotectWordDocs;
+
         /// <summary>
         /// Don't go below this zoom level
         /// </summary>
@@ -88,32 +59,32 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         /// <summary>
         /// Which editing features do we support?
         /// </summary>
-        private readonly String[] _supportedFeatures =
+        private readonly String[] _supportedCommands =
         {
-            "Cut",
-            "Copy",
-            "Paste",
-            "Undo",
-            "Redo",
-            "PreviousChar",
-            "NextChar",
-            "PreviousLine",
-            "NextLine",
-            "PreviousWord",
-            "NextWord",
-            "PreviousPage",
-            "NextPage",
-            "TopOfDoc",
-            "EndOfDoc",
-            "Home",
-            "PreviousPara",
-            "NextPara",
-            "End",
-            "SelectAll",
-            "SelectMode",
-            "DeletePreviousChar",
-            "DeleteNextChar",
-            "EnterKey"
+            "CmdCut",
+            "CmdCopy",
+            "CmdPaste",
+            "CmdUndo",
+            "CmdRedo",
+            "CmdPrevChar",
+            "CmdNextChar",
+            "CmdPrevLine",
+            "CmdNextLine",
+            "CmdPrevWord",
+            "CmdNextWord",
+            "CmdPrevPage",
+            "CmdNextPage",
+            "CmdTopOfDoc",
+            "CmdEndOfDoc",
+            "CmdHome",
+            "CmdPrevPara",
+            "CmdNextPara",
+            "CmdEnd",
+            "CmdSelectAll",
+            "CmdSelectModeToggle",
+            "CmdDeletePrevChar",
+            "CmdDeleteNextChar",
+            "CmdEnterKey"
         };
 
         /// <summary>
@@ -249,20 +220,17 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
         /// will depend on the current context.
         /// </summary>
         /// <param name="arg">contains info about the widget</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            if (String.Compare(arg.Widget.SubClass, "ClearTalkWindowText", true) == 0)
+            if (arg.Command == "CmdTalkWindowClear")
             {
                 arg.Handled = true;
                 arg.Enabled = false;
             }
-            else
+            else if (_supportedCommands.Contains(arg.Command))
             {
-                if (_supportedFeatures.Contains(arg.Widget.SubClass))
-                {
-                    arg.Enabled = true;
-                    arg.Handled = true;
-                }
+                arg.Enabled = true;
+                arg.Handled = true;
             }
         }
 
@@ -651,8 +619,8 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
                 if (Char.IsPunctuation(charAtCaret))
                 {
                     Log.Debug("Yes.  This s a punctuation");
-                    if (!Char.IsPunctuation(leftOfCaret) && 
-                        !Char.IsWhiteSpace(leftOfCaret) && 
+                    if (!Char.IsPunctuation(leftOfCaret) &&
+                        !Char.IsWhiteSpace(leftOfCaret) &&
                         leftOfCaret != '’')
                     {
                         wordStart = GetPreviousWordAtCaret(out word);
@@ -662,8 +630,8 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
 
                 if (wordStart < 0)
                 {
-                    if (leftOfCaret != '’' && 
-                        (Char.IsPunctuation(leftOfCaret) || 
+                    if (leftOfCaret != '’' &&
+                        (Char.IsPunctuation(leftOfCaret) ||
                         Char.IsWhiteSpace(leftOfCaret)))
                     {
                         wordStart = _wordApp.Selection.Start;
@@ -1625,6 +1593,26 @@ namespace ACAT.Lib.Extension.AppAgents.MSWord
                 _wordApp = (Word.Application)Marshal.GetActiveObject("Word.Application");
                 _wordApp.Application.WindowSelectionChange += Application_WindowSelectionChange;
                 _wordNavigator.WordApp = _wordApp;
+
+                if (autoUnprotectWordDocs)
+                {
+                    try
+                    {
+                        if (_wordApp.ActiveProtectedViewWindow != null)
+                        {
+                            Log.Debug("Unprotecting document");
+                            _wordApp.ActiveProtectedViewWindow.Edit();
+                        }
+                        else
+                        {
+                            Log.Debug("Document is already unprotected");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Debug("Unprotect document Exception " + ex);
+                    }
+                }
             }
             catch (Exception ex)
             {

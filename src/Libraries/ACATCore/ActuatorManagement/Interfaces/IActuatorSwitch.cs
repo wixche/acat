@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="IActuatorSwitch.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,40 +19,9 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Media;
-using System.Xml;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.ActuatorManagement
 {
@@ -82,7 +51,7 @@ namespace ACAT.Lib.Core.ActuatorManagement
         /// <summary>
         /// Gets or sets the length of time the switch to stay engaged for it to be
         /// recognized as a valid trigger.  If the switch stays engaged for less than
-        /// the AcceptTime, it is ignored.
+        /// the MinActuationHoldTime, it is ignored.
         /// </summary>
         int AcceptTime { get; set; }
 
@@ -119,9 +88,24 @@ namespace ACAT.Lib.Core.ActuatorManagement
         String BeepFile { get; set; }
 
         /// <summary>
+        /// Command that is mapped to this switch
+        /// </summary>
+        String Command { get; }
+
+        /// <summary>
         /// Gets or sets the confidence level of activation.  For future use.
         /// </summary>
         int Confidence { get; set; }
+
+        /// <summary>
+        /// Gets or sets the description
+        /// </summary>
+        String Description { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether this switch is enabled or not
+        /// </summary>
+        bool Enabled { get; set; }
 
         /// <summary>
         /// Gets the active state of the switch.  True if active.
@@ -161,7 +145,7 @@ namespace ACAT.Lib.Core.ActuatorManagement
         /// </summary>
         /// <param name="xmlNode">The XML node that contains the Switch attributes</param>
         /// <returns>True on successful parse, false otherwise</returns>
-        bool Load(XmlNode xmlNode);
+        bool Load(SwitchSetting switchSetting);
 
         /// <summary>
         /// Records the fact that a switch down was detected.  Call this when the

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="IScannerPanel.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,19 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// All scanners must implement the IScannerPanel interface.
+    /// All scanners must implement the IScannerPanel interface.  Examples
+    /// of scanners are the Alphabet scanner, the Cursor navigation scanner etc.
+    /// (Dialogs and Menus are not scanners)
     /// </summary>
     public interface IScannerPanel : IPanel
     {
@@ -99,16 +65,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         /// <param name="arg">Contextual information</param>
         /// <returns>true on success</returns>
-        bool CheckWidgetEnabled(CheckEnabledArgs arg);
-
-        /// <summary>
-        /// Performs initialization.  This is invoked by
-        /// the Screen manager after instatiating the panel, but
-        /// before the panel is shown.
-        /// </summary>
-        /// <param name="initArg"></param>
-        /// <returns></returns>
-        bool Initialize(StartupArg initArg);
+        bool CheckCommandEnabled(CommandEnabledArg arg);
 
         /// <summary>
         /// Invoked when the focus changes in the current
@@ -140,8 +97,8 @@ namespace ACAT.Lib.Core.PanelManagement
         /// alphabet scanner may be used to enter text in an edit
         /// control
         /// </summary>
-        /// <param name="parent"></param>
-        /// <param name="widget"></param>
+        /// <param name="parent">parent form</param>
+        /// <param name="widget">widget</param>
         void SetTargetControl(Form parent, Widget widget);
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AnimationManager.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,17 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Media;
 using ACAT.Lib.Core.ActuatorManagement;
+using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.Audit;
+using ACAT.Lib.Core.CommandManagement;
 using ACAT.Lib.Core.Interpreter;
+using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Media;
 
 namespace ACAT.Lib.Core.AnimationManagement
 {
@@ -72,7 +39,7 @@ namespace ACAT.Lib.Core.AnimationManagement
     public class AnimationManager : IDisposable
     {
         /// <summary>
-        /// Collection of animations for this screen
+        /// Collection of animations for this panel
         /// </summary>
         private readonly AnimationsCollection _animationsCollection;
 
@@ -87,9 +54,9 @@ namespace ACAT.Lib.Core.AnimationManagement
         private readonly Variables _variables;
 
         /// <summary>
-        /// Which screen is up on screen (for now, we have just one)
+        /// The panel to which this Animation Manager belongs
         /// </summary>
-        private Widget _currentScreen;
+        private Widget _currentPanel;
 
         /// <summary>
         /// has this object been disposed off yet?
@@ -102,6 +69,13 @@ namespace ACAT.Lib.Core.AnimationManagement
         private Animation _firstAnimation;
 
         /// <summary>
+        /// Panel class this scanner represents
+        /// </summary>
+        private String _panelClass = String.Empty;
+
+        private PanelConfigMapEntry _panelConfigMapEntry;
+
+        /// <summary>
         /// The animation player that actually plays the animation
         /// </summary>
         private AnimationPlayer _player;
@@ -112,9 +86,25 @@ namespace ACAT.Lib.Core.AnimationManagement
         private SoundPlayer _soundPlayer;
 
         /// <summary>
-        /// Maps switches to actions.
+        /// Animation that was in progress when a swtich-accept event was
+        /// received
         /// </summary>
-        private SwitchConfig _switchConfig;
+        private Animation _switchAcceptedAnimation;
+
+        /// <summary>
+        /// Highlighted widget when a switch accept event is recrived
+        /// </summary>
+        private AnimationWidget _switchAcceptedHighlightedWidget;
+
+        /// <summary>
+        /// Animation that was in progress when a switch-down was received
+        /// </summary>
+        private Animation _switchDownAnimation;
+
+        /// <summary>
+        /// Highlighted widget when a switchdown event is received
+        /// </summary>
+        private AnimationWidget _switchDownHighlightedWidget;
 
         /// <summary>
         /// Initializes the AnimationManager class
@@ -124,9 +114,11 @@ namespace ACAT.Lib.Core.AnimationManagement
             _interpreter = new Interpret();
             _animationsCollection = new AnimationsCollection();
             _soundPlayer = null;
-            _currentScreen = null;
+            _currentPanel = null;
             _player = null;
+            IsSwitchActive = false;
             _variables = new Variables();
+            resetSwitchEventStates();
         }
 
         /// <summary>
@@ -152,6 +144,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <summary>
         /// Raised to resolve widget references
         /// in the animation sequence
+        /// </summary>
         public event ResolveWidgetChildren EvtResolveWidgetChildren;
 
         /// <summary>
@@ -161,6 +154,11 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             get { return _interpreter; }
         }
+
+        /// <summary>
+        /// Gets/sets whether an actuator switch is currently active
+        /// </summary>
+        public bool IsSwitchActive { get; set; }
 
         /// <summary>
         /// Disposes resources
@@ -186,28 +184,28 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <summary>
         /// Allcoate resources, parse the config file which contains all the
         /// animations and create a list of animation objects. Subscribe to
-        /// events
+        /// events. The parameter panelConfigMapEntry contains all the info about
+        /// the current scanner
         /// </summary>
-        /// <param name="configPath">Name of the config file for the screen</param>
+        /// <param name="panelConfigMapEntry">Config object for the panel</param>
         /// <returns>true on success</returns>
-        public bool Init(String configPath)
+        public bool Init(PanelConfigMapEntry panelConfigMapEntry)
         {
-            bool retVal = _animationsCollection.Load(configPath);
-            if (retVal)
-            {
-                retVal = _interpreter.LoadScripts(configPath);
-            }
+            _panelConfigMapEntry = panelConfigMapEntry;
 
+            _panelClass = (panelConfigMapEntry != null) ? panelConfigMapEntry.PanelClass : String.Empty;
+
+            bool retVal = _animationsCollection.Load(panelConfigMapEntry.ConfigFileName);
             if (retVal)
             {
-                _switchConfig = new SwitchConfig();
-                _switchConfig.Load(configPath);
+                retVal = _interpreter.LoadScripts(panelConfigMapEntry.ConfigFileName);
             }
 
             if (retVal)
             {
                 subscribeToInterpreterEvents();
-                ActuatorManager.Instance.EvtSwitchActivated += actuatorManager_EvtSwitchActivated;
+
+                subscribeToActuatorEvents();
             }
 
             Log.Debug("returning from Anim manager init()");
@@ -287,7 +285,18 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
-        /// Resume animation
+        /// Transitions to the starting sequence
+        /// </summary>
+        public void Restart()
+        {
+            if (_firstAnimation != null)
+            {
+                Transition(_firstAnimation);
+            }
+        }
+
+        /// <summary>
+        /// Resumes animation
         /// </summary>
         public void Resume()
         {
@@ -305,7 +314,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <param name="widgetName">Name of the widget</param>
         public void SetSelectedWidget(String widgetName)
         {
-            Widget selectedWidget = _currentScreen.Finder.FindChild(widgetName);
+            Widget selectedWidget = _currentPanel.Finder.FindChild(widgetName);
             if (selectedWidget != null)
             {
                 SetSelectedWidget(selectedWidget);
@@ -346,15 +355,15 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
-        /// Starts the animation sequence for the specified screen. It starts
+        /// Starts the animation sequence for the specified panel. It starts
         /// with the animation that has the 'start' attribute set to true in
         /// the xml file
         /// </summary>
-        /// <param name="screen">Which screen to start the animations for?</param>
+        /// <param name="panelWidget">Which panel to start the animations for?</param>
         /// <param name="animationName">Name of the animation sequence</param>
-        public void Start(Widget screen, String animationName = null)
+        public void Start(Widget panelWidget, String animationName = null)
         {
-            Log.Debug("Start animation for screen " + screen.Name);
+            Log.Debug("Start animation for panel " + panelWidget.Name);
 
             if (_player != null)
             {
@@ -362,21 +371,23 @@ namespace ACAT.Lib.Core.AnimationManagement
                 _player.Dispose();
             }
 
-            _currentScreen = screen;
+            resetSwitchEventStates();
 
-            subscribeToMouseClickEvents(screen);
+            _currentPanel = panelWidget;
 
-            _player = new AnimationPlayer(screen, _interpreter, _variables);
+            subscribeToMouseClickEvents(panelWidget);
+
+            _player = new AnimationPlayer(panelWidget, _interpreter, _variables);
             _player.EvtPlayerStateChanged += _player_EvtPlayerStateChanged;
-            _variables.Set(Variables.SelectedWidget, screen);
-            _variables.Set(Variables.CurrentScreen, screen);
+            _variables.Set(Variables.SelectedWidget, panelWidget);
+            _variables.Set(Variables.CurrentPanel, panelWidget);
 
             // get all the animations for the specified animation name.
             var animations = getAnimations(animationName);
 
             if (animations == null)
             {
-                Log.Error("Could not find animations entry for screen " + screen.Name);
+                Log.Error("Could not find animations entry for panel " + panelWidget.Name);
                 return;
             }
 
@@ -420,7 +431,9 @@ namespace ACAT.Lib.Core.AnimationManagement
             {
                 Log.Debug();
 
-                Log.Debug("_currentScreen: " + _currentScreen);
+                Log.Debug("_currentPanel: " + _currentPanel);
+
+                resetSwitchEventStates();
 
                 if (_player == null)
                 {
@@ -459,7 +472,7 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             try
             {
-                Log.Debug("Transition( " + animation.Name + "). _currentScreen: " + _currentScreen.Name);
+                Log.Debug("Transition( " + animation.Name + "). _currentPanel: " + _currentPanel.Name);
                 _player.Transition(animation);
             }
             catch (Exception ex)
@@ -481,7 +494,7 @@ namespace ACAT.Lib.Core.AnimationManagement
 
                 if (disposing)
                 {
-                    unsubscribeToMouseClickEvents(_currentScreen);
+                    unsubscribeToMouseClickEvents(_currentPanel);
 
                     // dispose all managed resources.
                     if (_player != null)
@@ -500,7 +513,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                         _animationsCollection.Dispose();
                     }
 
-                    ActuatorManager.Instance.EvtSwitchActivated -= actuatorManager_EvtSwitchActivated;
+                    unsubscribeFromActuatorEvents();
                 }
 
                 // Release unmanaged resources.
@@ -528,12 +541,23 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
+        /// Event handler for event raised when the actuator manager has
+        /// decided that the switch has been engaged long enough to be
+        /// treated as a valid trigger
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
+        private void actuatorManager_EvtSwitchAccepted(object sender, ActuatorSwitchEventArgs e)
+        {
+            setSwitchState(true);
+        }
+
+        /// <summary>
         /// A switch was activated. Figure out the context and execute the
-        /// appropriate action. The input manager triggers this event.  Evey
-        /// switch has an action that is configured in the swtichconfigmap file.
+        /// appropriate action. The input manager triggers this event.  Every
+        /// switch has an associated action.  It could be a command or the switch
+        /// can be used to select highlighted item on a trigger.
         /// The action is executed depending on the state of the animation player.
-        /// TODO:  If there are hot keys we need to handle for multimodal
-        /// gesture, this is probablty where we would want to handle it
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event args</param>
@@ -542,18 +566,18 @@ namespace ACAT.Lib.Core.AnimationManagement
             IActuatorSwitch switchObj = e.SwitchObj;
             try
             {
-                if (_player == null || _currentScreen == null)
+                if (_player == null || _currentPanel == null)
                 {
                     return;
                 }
 
                 Log.Debug("switch: " + switchObj.Name);
-                Log.Debug("   Screen: " + _currentScreen.Name);
+                Log.Debug("   Panel: " + _currentPanel.Name);
 
-                if (_currentScreen.UIControl is System.Windows.Forms.Form)
+                if (_currentPanel.UIControl is System.Windows.Forms.Form)
                 {
-                    bool visible = Windows.GetVisible(_currentScreen.UIControl);
-                    Log.Debug("Form: " + _currentScreen.UIControl.Name + ", playerState: " + _player.State + ", visible: " + visible);
+                    bool visible = Windows.GetVisible(_currentPanel.UIControl);
+                    Log.Debug("Form: " + _currentPanel.UIControl.Name + ", playerState: " + _player.State + ", visible: " + visible);
                     if (!visible)
                     {
                         return;
@@ -561,23 +585,20 @@ namespace ACAT.Lib.Core.AnimationManagement
                 }
 
                 // get the action associated with the switch
-                PCode onTrigger = getOnTrigger(switchObj);
-                if (onTrigger == null)
+                String onTrigger = switchObj.Command;
+                if (String.IsNullOrEmpty(onTrigger))
                 {
                     Log.Debug("OnTrigger is null. returning");
                     return;
                 }
 
-                Log.Debug("onTrigger.HasCOde: " + onTrigger.HasCode());
-
                 // execute action if the player is in the right state.
                 if (_player.State != PlayerState.Stopped &&
                     _player.State != PlayerState.Unknown &&
                     _player.State != PlayerState.Paused &&
-                    onTrigger.HasCode())
+                    String.Compare(onTrigger, SwitchSetting.TriggerCommand, true) != 0)
                 {
-                    Log.Debug("Executing OnTrigger for screen..." + _currentScreen.Name);
-                    _interpreter.Execute(onTrigger);
+                    runSwitchMappedCommand(switchObj);
                     return;
                 }
 
@@ -588,10 +609,10 @@ namespace ACAT.Lib.Core.AnimationManagement
                     return;
                 }
 
-                Log.Debug("PLayer state is " + _player.State);
+                Log.Debug("Player state is " + _player.State);
                 if (_player.State != PlayerState.Running)
                 {
-                    Log.Debug(_currentScreen.Name + ": Player is not Running. Returning");
+                    Log.Debug(_currentPanel.Name + ": Player is not Running. Returning");
                     return;
                 }
 
@@ -600,18 +621,37 @@ namespace ACAT.Lib.Core.AnimationManagement
                 AnimationWidget highlightedWidget = _player.HighlightedWidget;
                 Animation currentAnimation = _player.CurrentAnimation;
 
+                highlightedWidget = _switchDownHighlightedWidget;
+                currentAnimation = _switchDownAnimation;
+
+                if (highlightedWidget == null)
+                {
+                    highlightedWidget = _switchAcceptedHighlightedWidget;
+                    currentAnimation = _switchAcceptedAnimation;
+                }
+
+                if (highlightedWidget == null)
+                {
+                    highlightedWidget = _player.HighlightedWidget;
+                    currentAnimation = _player.CurrentAnimation;
+                }
+
+                resetSwitchEventStates();
+
                 if (currentAnimation != null && highlightedWidget != null)
                 {
+                    setSwitchState(false);
+
                     var widgetName = (highlightedWidget.UIWidget is IButtonWidget) ?
                                                         "Button" :
                                                         highlightedWidget.UIWidget.Name;
 
                     AuditLog.Audit(new AuditEventUISwitchDetect(switchObj.Name,
-                                                            _currentScreen.Name,
+                                                            _currentPanel.Name,
                                                             highlightedWidget.UIWidget.GetType().Name,
                                                             widgetName));
 
-                    Log.Debug(_currentScreen.Name + ": Switch on " +
+                    Log.Debug(_currentPanel.Name + ": Switch on " +
                                 highlightedWidget.UIWidget.Name + " type: " +
                                 highlightedWidget.UIWidget.GetType().Name);
 
@@ -634,13 +674,64 @@ namespace ACAT.Lib.Core.AnimationManagement
                 }
                 else
                 {
-                    Log.Debug(_currentScreen.Name + ":No current animation or highlighed widget!!");
+                    Log.Debug(_currentPanel.Name + ": No current animation or highlighed widget!!");
                 }
             }
             catch (Exception ex)
             {
                 Log.Debug(ex.ToString());
             }
+            finally
+            {
+                setSwitchState(false);
+            }
+        }
+
+        /// <summary>
+        /// Event handler for when an actuator switch is down
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
+        private void actuatorManager_EvtSwitchDown(object sender, ActuatorSwitchEventArgs e)
+        {
+            setSwitchState(true);
+
+            if (_player != null)
+            {
+                _switchDownAnimation = _player.CurrentAnimation;
+                var widget = _player.HighlightedWidget;
+                if (widget != null)
+                {
+                    Log.Debug("Highlighted widget: " + widget.UIWidget.Name);
+                    _switchDownHighlightedWidget = widget;
+                }
+                else
+                {
+                    _switchDownHighlightedWidget = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Event handler for when an actuator switch is rejected
+        /// This is when a switch is held down for < acceptTime.
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event argument</param>
+        private void actuatorManager_EvtSwitchRejected(object sender, ActuatorSwitchEventArgs e)
+        {
+            resetSwitchEventStates();
+
+            setSwitchState(false);
+        }
+
+        /// <summary>
+        /// Event handler for when an actuator switch is up
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
+        private void actuatorManager_EvtSwitchUp(object sender, ActuatorSwitchEventArgs e)
+        {
         }
 
         /// <summary>
@@ -692,7 +783,7 @@ namespace ACAT.Lib.Core.AnimationManagement
                 String widgetName = resolvedArgs[0];
 
                 // get the widget object
-                var widget = _currentScreen.Finder.FindChild(widgetName);
+                var widget = _currentPanel.Finder.FindChild(widgetName);
                 if (widget != null)
                 {
                     Log.Debug("Actuate. widgetname: " + widget.Name + " Text: " + widget.GetText());
@@ -739,7 +830,7 @@ namespace ACAT.Lib.Core.AnimationManagement
             }
 
             var widgetName = resolvedArgs[0];
-            var widget = _currentScreen.Finder.FindChild(widgetName);
+            var widget = _currentPanel.Finder.FindChild(widgetName);
             if (widget != null)
             {
                 // turn off everything except the one we want
@@ -780,8 +871,8 @@ namespace ACAT.Lib.Core.AnimationManagement
 
             String widgetName = resolvedArgs[0];
 
-            Log.Debug("_currentscreen " + _currentScreen.Name + " widgetname: " + widgetName);
-            Widget widget = _currentScreen.Finder.FindChild(widgetName);
+            Log.Debug("_currentPanel " + _currentPanel.Name + " widgetname: " + widgetName);
+            var widget = _currentPanel.Finder.FindChild(widgetName);
             if (widget != null)
             {
                 if (onOff)
@@ -792,25 +883,6 @@ namespace ACAT.Lib.Core.AnimationManagement
                 {
                     widget.SelectedHighlightOff();
                 }
-            }
-        }
-
-        /// <summary>
-        /// Run a script referred to by scriptRef (e.g., onBack, onSelect etc)
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event arg</param>
-        private void AppInterpreter_EvtRun(object sender, InterpreterRunEventArgs e)
-        {
-            switch (e.Script)
-            {
-                case "@onBack":
-                    if (_player.CurrentAnimation != null && _player.CurrentAnimation.OnBack.HasCode())
-                    {
-                        _interpreter.Execute(_player.CurrentAnimation.OnBack);
-                    }
-
-                    break;
             }
         }
 
@@ -867,27 +939,23 @@ namespace ACAT.Lib.Core.AnimationManagement
         /// <param name="e">event args</param>
         private void button_EvtMouseClicked(object sender, WidgetEventArgs e)
         {
-            if (_player != null)
+            if (_player == null)
             {
-                var widget = e.SourceWidget;
+                return;
+            }
 
-                var animationWidget = _player.GetAnimationWidgetInCurrentAnimation(widget);
-                PCode onMouseClick = null;
+            var widget = e.SourceWidget;
 
-                SetSelectedWidget(widget);
+            SetSelectedWidget(widget);
 
-                if (animationWidget != null && animationWidget.OnMouseClick != null)
+            if (widget.Enabled)
+            {
+                if (widget.OnMouseClick != null && widget.OnMouseClick.HasCode())
                 {
-                    onMouseClick = animationWidget.OnMouseClick;
-                }
-                else if (widget.OnMouseClick != null)
-                {
-                    onMouseClick = widget.OnMouseClick;
-                }
-
-                if (onMouseClick != null && onMouseClick.HasCode())
-                {
-                    _interpreter.Execute(onMouseClick);
+                    if (_player.State != PlayerState.Paused)
+                    {
+                        _interpreter.Execute(widget.OnMouseClick);
+                    }
                 }
                 else if (widget.IsMouseClickActuateOn)
                 {
@@ -911,69 +979,6 @@ namespace ACAT.Lib.Core.AnimationManagement
             }
 
             return animations;
-        }
-
-        /// <summary>
-        /// Returns the action associated with the switch.  These actions
-        /// are configured in the switch map config file. First checks the
-        /// animation config file to see if there is a mapping there.  If not
-        /// goes to the global mapping table
-        /// </summary>
-        /// <param name="switchObj">the switch object</param>
-        /// <returns>associated pCode</returns>
-        private PCode getOnTrigger(IActuatorSwitch switchObj)
-        {
-            const string defaultWidgetClass = "default";
-            Log.Debug();
-
-            if (_switchConfig == null)
-            {
-                return null;
-            }
-
-            // check local switchmap first
-            PCode pCode = _switchConfig.GetOnTrigger(switchObj);
-            if (pCode != null)
-            {
-                Log.Debug("Found local pcode for " + switchObj.Name);
-                return pCode;
-            }
-
-            Log.Debug("Did not find local switchconfig.  Checking global one");
-
-            // if this screen is a member of a 'class' of screens (configured thru
-            // the subclass attribute), check if there is a switch map for the class.
-            // otherwise, just use the default one.
-
-            var widgetClass = (_currentScreen != null) ? _currentScreen.SubClass : String.Empty;
-
-            if (String.IsNullOrEmpty(widgetClass))
-            {
-                widgetClass = defaultWidgetClass;
-            }
-
-            Log.Debug("widgetclass: " + widgetClass);
-
-            SwitchConfig switchConfig = ActuatorManager.Instance.SwitchConfigMap;
-
-            PCode retVal = switchConfig.GetOnTrigger(widgetClass, switchObj);
-
-            if (retVal != null)
-            {
-                return retVal;
-            }
-
-            if (widgetClass != defaultWidgetClass)
-            {
-                Log.Debug("Could not find PCode for " + widgetClass + ", trying default");
-                widgetClass = defaultWidgetClass;
-
-                retVal = switchConfig.GetOnTrigger(widgetClass, switchObj);
-            }
-
-            Log.IsNull("retval ", retVal);
-
-            return retVal;
         }
 
         /// <summary>
@@ -1027,6 +1032,97 @@ namespace ACAT.Lib.Core.AnimationManagement
         }
 
         /// <summary>
+        /// Sets all the variables related to switch events
+        /// </summary>
+        private void resetSwitchEventStates()
+        {
+            _switchDownHighlightedWidget = null;
+            _switchAcceptedHighlightedWidget = null;
+            _switchDownAnimation = null;
+            _switchAcceptedAnimation = null;
+        }
+
+        /// <summary>
+        /// Runds the command mapped to the specified switch. Checks
+        /// the command permissions if it CAN be executed.
+        /// </summary>
+        /// <param name="switchObj">The switch object</param>
+        private void runSwitchMappedCommand(IActuatorSwitch switchObj)
+        {
+            bool runCommand = true;
+            String onTrigger = switchObj.Command;
+
+            var form = _currentPanel.UIControl;
+            if (form is IScannerPanel)
+            {
+                var panelCommon = (form as IScannerPanel).PanelCommon;
+                var arg = new CommandEnabledArg(null, onTrigger);
+                panelCommon.CheckCommandEnabled(new CommandEnabledArg(null, onTrigger));
+
+                if (arg.Handled)
+                {
+                    if (!arg.Enabled)
+                    {
+                        Log.Debug("Command " + onTrigger + " is not currently enabled");
+                        return;
+                    }
+                    else
+                    {
+                        Log.Debug("Command " + onTrigger + " IS ENABLED");
+                    }
+                }
+                else
+                {
+                    Log.Debug("arg.handled is false for " + onTrigger);
+
+                    var cmdDescriptor = CommandManager.Instance.AppCommandTable.Get(onTrigger);
+                    if (cmdDescriptor != null && !cmdDescriptor.EnableSwitchMap)
+                    {
+                        Log.Debug("EnableswitchMap is not enabled for " + onTrigger);
+                        runCommand = false;
+                    }
+                }
+            }
+            else
+            {
+                Log.Debug("Dialog is active. Will not handle");
+                runCommand = false;
+            }
+
+            if (runCommand)
+            {
+                Log.Debug("Executing OnTrigger command " + onTrigger + " for panel..." + _currentPanel.Name);
+                PCode pcode = new PCode { Script = "run(" + onTrigger + ")" };
+                var parser = new Parser();
+                if (parser.Parse(pcode.Script, ref pcode))
+                {
+                    _interpreter.Execute(pcode);
+                }
+            }
+        }
+
+        private void setSwitchState(bool state)
+        {
+            IsSwitchActive = state;
+            if (_player != null)
+            {
+                _player.IsSwitchActive = state;
+            }
+        }
+
+        /// <summary>
+        /// Subscribes to events from the actuator manager
+        /// </summary>
+        private void subscribeToActuatorEvents()
+        {
+            ActuatorManager.Instance.EvtSwitchActivated += actuatorManager_EvtSwitchActivated;
+            ActuatorManager.Instance.EvtSwitchDown += actuatorManager_EvtSwitchDown;
+            ActuatorManager.Instance.EvtSwitchUp += actuatorManager_EvtSwitchUp;
+            ActuatorManager.Instance.EvtSwitchAccepted += actuatorManager_EvtSwitchAccepted;
+            ActuatorManager.Instance.EvtSwitchRejected += actuatorManager_EvtSwitchRejected;
+        }
+
+        /// <summary>
         /// Subscribes to the various events we are interested in from the interpreter.
         /// While the animation is executing, the interpreter interprets the code associated
         /// with the animation and raises events as and when the code needs to be acted on.
@@ -1039,7 +1135,6 @@ namespace ACAT.Lib.Core.AnimationManagement
             _interpreter.EvtHighlightNotify += AppInterpreter_EvtHighlightNotify;
             _interpreter.EvtHighlightSelectedNotify += AppInterpreter_EvtHighlightSelectedNotify;
             _interpreter.EvtBeep += AppInterpreter_EvtBeep;
-            _interpreter.EvtRun += AppInterpreter_EvtRun;
             _interpreter.EvtStopNotify += AppInterpreter_EvtStop;
         }
 
@@ -1052,10 +1147,22 @@ namespace ACAT.Lib.Core.AnimationManagement
         {
             var list = new List<Widget>();
             rootWidget.Finder.FindAllButtons(list);
-            foreach (Widget button in list)
+            foreach (var button in list)
             {
                 button.EvtMouseClicked += button_EvtMouseClicked;
             }
+        }
+
+        /// <summary>
+        /// Unsubscribes from actuator events
+        /// </summary>
+        private void unsubscribeFromActuatorEvents()
+        {
+            ActuatorManager.Instance.EvtSwitchActivated -= actuatorManager_EvtSwitchActivated;
+            ActuatorManager.Instance.EvtSwitchDown -= actuatorManager_EvtSwitchDown;
+            ActuatorManager.Instance.EvtSwitchUp -= actuatorManager_EvtSwitchUp;
+            ActuatorManager.Instance.EvtSwitchAccepted -= actuatorManager_EvtSwitchAccepted;
+            ActuatorManager.Instance.EvtSwitchRejected -= actuatorManager_EvtSwitchRejected;
         }
 
         /// <summary>

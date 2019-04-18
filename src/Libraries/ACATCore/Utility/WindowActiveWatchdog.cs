@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WindowActiveWatchdog.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,43 +19,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Windows.Forms;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Utility
 {
@@ -66,19 +30,19 @@ namespace ACAT.Lib.Core.Utility
     public class WindowActiveWatchdog : IDisposable
     {
         /// <summary>
-        /// How often to check?
+        /// Has this object been disposed
         /// </summary>
-        private const int Interval = 10;
-
-        /// <summary>
-        /// Timer to track the form focus
-        /// </summary>
-        private readonly Timer _timer;
+        private bool _disposed;
 
         /// <summary>
         /// Which form to watch
         /// </summary>
         private Form _form;
+
+        /// <summary>
+        /// Pause the watchdog?
+        /// </summary>
+        private bool _paused;
 
         /// <summary>
         /// Constructor.  Allocates resources, event handlers
@@ -87,55 +51,88 @@ namespace ACAT.Lib.Core.Utility
         public WindowActiveWatchdog(Form form)
         {
             _form = form;
+            _form.TopMost = false;
             _form.TopMost = true;
-            _timer = new Timer { Interval = Interval };
-            _form.Activated += _form_Activated;
+
             _form.Deactivate += _form_Deactivate;
-            _timer.Tick += timer_Tick;
             _form.VisibleChanged += _form_VisibleChanged;
         }
 
         /// <summary>
-        /// Call this to unallocate resources.
+        /// Disposes resources
         /// </summary>
         public void Dispose()
         {
-            Log.Debug();
+            Dispose(true);
 
-            try
-            {
-                _timer.Dispose();
-                Log.Debug("_timer is disposed");
-            }
-            catch (Exception e)
-            {
-                Log.Debug(e.ToString());
-            }
-
-            _form = null;
+            // Prevent finalization code for this object
+            // from executing a second time.
+            GC.SuppressFinalize(this);
         }
 
         /// <summary>
-        /// Our form is active.  Stop timer
+        /// Pause the watchdog
         /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event arg</param>
-        private void _form_Activated(object sender, EventArgs e)
+        public void Pause()
         {
-            Log.Debug("Stopping timer");
-            _timer.Stop();
+            _paused = true;
         }
 
         /// <summary>
-        /// Some other window just got focus.  Start timer and
-        /// restore focus
+        /// Resume the watchdog
+        /// </summary>
+        public void Resume()
+        {
+            _paused = false;
+            reactivateForm();
+        }
+
+        /// <summary>
+        /// Disposer. Release resources and cleanup.
+        /// </summary>
+        /// <param name="disposing">true to dispose managed resources</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            // Check to see if Dispose has already been called.
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    Log.Debug();
+
+                    try
+                    {
+                        _form.Deactivate -= _form_Deactivate;
+                        _form.VisibleChanged -= _form_VisibleChanged;
+                    }
+                    catch (Exception e)
+                    {
+                        Log.Debug(e.ToString());
+                    }
+
+                    _form = null;
+                }
+
+                // Release unmanaged resources.
+            }
+
+            _disposed = true;
+        }
+
+        /// <summary>
+        /// Some other window just got focus.  Restores focus
+        /// back to the form
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event arg</param>
         private void _form_Deactivate(object sender, EventArgs e)
         {
-            Log.Debug("Starting timer");
-            _timer.Start();
+            if (!_paused)
+            {
+                Log.Debug("DEACTVATED!! Re-activating " + getFormName());
+
+                reactivateForm();
+            }
         }
 
         /// <summary>
@@ -145,41 +142,34 @@ namespace ACAT.Lib.Core.Utility
         /// <param name="e">event arg</param>
         private void _form_VisibleChanged(object sender, EventArgs e)
         {
-            if (_form != null)
+            try
             {
-                if (_form.Visible)
+                if (_form != null && _form.Visible)
                 {
-                    Log.Debug("Starting timer");
-                    _timer.Start();
+                    reactivateForm();
                 }
-                else
-                {
-                    Log.Debug("Stopping timer");
-                    _timer.Stop();
-                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug(ex.ToString());
             }
         }
 
         /// <summary>
-        /// Timer tick.  Activates window
+        /// Sets focus to the form
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void timer_Tick(object sender, EventArgs e)
+        private void focusThisForm()
         {
             Log.Debug();
-            if (_form == null)
-            {
-                _timer.Stop();
-                return;
-            }
 
-            if (_form.Visible && _form.WindowState != FormWindowState.Minimized)
+            try
             {
-                Log.Debug("Activating form");
-                try
+                if (_form != null && _form.Visible && _form.WindowState != FormWindowState.Minimized)
                 {
-                    _form.Invoke(new MethodInvoker(delegate()
+                    Log.Debug("Activating form " + getFormName());
+                    try
+                    {
+                        _form.Invoke(new MethodInvoker(delegate
                         {
                             // this is a windows defect.  If topmost
                             // is already true, it has not effect.
@@ -188,21 +178,41 @@ namespace ACAT.Lib.Core.Utility
                             _form.TopMost = true;
 
                             Windows.SetForegroundWindow(_form.Handle);
+
                             _form.Select();
                             _form.Activate();
                             _form.Focus();
                         }));
-                }
-                catch
-                {
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Exception(ex);
+                    }
                 }
             }
-            else
+            catch (Exception ex)
             {
-                Log.Debug("Form is not visible");
+                Log.Debug(ex.ToString());
             }
 
-            _timer.Stop();
+            Log.Debug("Returning");
+        }
+
+        /// <summary>
+        /// Returns the name of the form
+        /// </summary>
+        /// <returns>form name</returns>
+        private String getFormName()
+        {
+            return (_form != null) ? _form.Name : "null";
+        }
+
+        /// <summary>
+        /// Asychronously sets focus back to the form
+        /// </summary>
+        private void reactivateForm()
+        {
+            System.Threading.Tasks.Task t = System.Threading.Tasks.Task.Factory.StartNew(focusThisForm);
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ResizeScannerForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,14 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Security.Permissions;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
 using ACAT.Lib.Extension;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Security.Permissions;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
@@ -71,30 +35,27 @@ namespace ACAT.Extensions.Default.UI.Dialogs
     /// make the scanner bigger or smaller.  The fonts on the
     /// scanner scale proportionately. The user can then save
     /// the size of the scanner as default.
-    /// User can also set the default position of hte scanner
+    /// User can also set the default position of the scanner
     /// in the display.
     /// This dialog displays in the center of the monitor
     /// and the alphabet scanner is displayed so the user can
     /// resize/reposition it.
     /// </summary>
-    [DescriptorAttribute("7310C2B3-94DD-4356-824E-8D475832CE34", "ResizeScannerForm", "Resize Scanner Dialog")]
+    [DescriptorAttribute("7310C2B3-94DD-4356-824E-8D475832CE34",
+                        "ResizeScannerForm",
+                        "Resize Scanner Dialog")]
     public partial class ResizeScannerForm : Form, IDialogPanel
     {
         /// <summary>
-        /// Thicnkess of the border around the form
-        /// </summary>
-        private const int BorderThickness = 2;
-
-        /// <summary>
         /// The DialogCommon object
         /// </summary>
-        private readonly DialogCommon _dialogCommon;
+        private DialogCommon _dialogCommon;
 
         /// <summary>
         /// Scanner position before it is moved, so it can
         /// be restored later if reqd.
         /// </summary>
-        private readonly Windows.WindowPosition _initialWindowPosition;
+        private Windows.WindowPosition _initialWindowPosition;
 
         /// <summary>
         /// Did the user change anything?
@@ -105,7 +66,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// The scanner form that will be used to visually show
         /// the size as the user resizes it.
         /// </summary>
-        private Form _previewScreen;
+        private Form _previewScanner;
 
         /// <summary>
         /// The interface of the scanner form that will be used to visually show
@@ -114,28 +75,20 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         private IScannerPreview _previewScreenInterface;
 
         /// <summary>
+        /// Watchdog object that makes sure that the scanner
+        /// is not overlapped by another window
+        /// </summary>
+        private WindowOverlapWatchdog _windowOverlapWatchdog;
+
+        /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
         public ResizeScannerForm()
         {
             InitializeComponent();
 
-            _dialogCommon = new DialogCommon(this);
-
-            _initialWindowPosition = Context.AppWindowPosition;
-
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
-
-            FormBorderStyle = FormBorderStyle.None;
-
             Load += ResizeScannerScreen_Load;
             FormClosing += ResizeScannerScreen_FormClosing;
-            BorderPanel.Paint += BorderPanel_Paint;
-
-            subscribeToButtonEvents();
         }
 
         /// <summary>
@@ -145,6 +98,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             get { return DescriptorAttribute.GetDescriptor(GetType()); }
         }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
 
         /// <summary>
         /// Gets the synchronization object for this scanner
@@ -169,6 +127,29 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Intitializes the class
+        /// </summary>
+        /// <param name="startupArg">startup param</param>
+        /// <returns>true on success</returns>
+        public bool Initialize(StartupArg startupArg)
+        {
+            _dialogCommon = new DialogCommon(this);
+
+            _initialWindowPosition = Context.AppWindowPosition;
+
+            _dialogCommon.AutoDockScanner = false;
+
+            if (!_dialogCommon.Initialize(startupArg))
+            {
+                return false;
+            }
+
+            subscribeToButtonEvents();
+
+            return true;
+        }
+
+        /// <summary>
         /// Triggered when a widget is actuated.
         /// </summary>
         /// <param name="widget">Which one triggered?</param>
@@ -184,7 +165,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 return;
             }
 
-            Invoke(new MethodInvoker(delegate()
+            Invoke(new MethodInvoker(delegate
             {
                 switch (value)
                 {
@@ -216,18 +197,21 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Pause the scanner
+        /// Pauses the scanner
         /// </summary>
         public void OnPause()
         {
+            _windowOverlapWatchdog.Pause();
             _dialogCommon.OnPause();
         }
 
         /// <summary>
-        /// Resume paused scanner
+        /// Resumes paused scanner
         /// </summary>
         public void OnResume()
         {
+            _windowOverlapWatchdog.Resume();
+
             _dialogCommon.OnResume();
         }
 
@@ -247,7 +231,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Release resources
+        /// Releases resources
         /// </summary>
         /// <param name="e"></param>
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -268,38 +252,13 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Paints the border of the form
-        /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void BorderPanel_Paint(object sender, PaintEventArgs e)
-        {
-            if (BorderPanel.BorderStyle == BorderStyle.FixedSingle)
-            {
-                const int thickness = BorderThickness;
-                const int halfThickness = thickness / 2;
-                using (var pen = new Pen(Color.Black, thickness))
-                {
-                    e.Graphics.DrawRectangle(
-                            pen,
-                            new Rectangle(halfThickness,
-                            halfThickness,
-                            BorderPanel.ClientSize.Width - thickness,
-                            BorderPanel.ClientSize.Height - thickness));
-                }
-            }
-        }
-
-        /// <summary>
-        /// User wants to quit. Confirm and exit
+        /// User wants to quit. Confirms and exits
         /// </summary>
         private void onBack()
         {
-            Log.Debug("chose back button.");
-
             if (_isDirty)
             {
-                if (DialogUtils.Confirm(this, "Save settings?"))
+                if (DialogUtils.Confirm(this, R.GetString("SaveSettings")))
                 {
                     _previewScreenInterface.SaveSettings();
                 }
@@ -313,31 +272,32 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// This function auto positions the scanner at
-        /// one of the four corners of the monitor and lets
+        /// Auto positions the scanner at the pre-defined
+        /// locations on the display and lets
         /// the user select the default position
         /// </summary>
         private void onRepositionScanner()
         {
             _isDirty = true;
 
-            _dialogCommon.GetAnimationManager().Interrupt();
+            PanelCommon.AnimationManager.Interrupt();
             Windows.SetOpacity(this, 0.0f);
-            var scanner = (_previewScreen as IScannerPanel);
+
+            var scanner = (_previewScanner as IScannerPanel);
             if (scanner != null)
             {
                 scanner.ScannerCommon.PositionSizeController.EvtAutoRepositionScannerStop +=
-                    PositionSizeControllerOnEvtAutoRepositionScannerStop;
-                scanner.ScannerCommon.PositionSizeController.AutoRepositionScannerStart(false);
+                                            PositionSizeControllerOnEvtAutoRepositionScannerStop;
+                scanner.ScannerCommon.PositionSizeController.AutoRepositionScannerStart();
             }
         }
 
         /// <summary>
-        /// Restore default position and sizze of the scanner
+        /// Restores default position and size of the scanner
         /// </summary>
         private void onRestoreDefaults()
         {
-            if (DialogUtils.Confirm("Restore default settings?"))
+            if (DialogUtils.Confirm(R.GetString("RestoreDefaultSettings")))
             {
                 _previewScreenInterface.RestoreDefaults();
                 _isDirty = true;
@@ -345,7 +305,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Increase the size of the scanner (zoom in)
+        /// Increases the size of the scanner (zoom in)
         /// </summary>
         private void onZoomIn()
         {
@@ -354,7 +314,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Reduce the size of the scanner (zoom out)
+        /// Decreases the size of the scanner (zoom out)
         /// </summary>
         private void onZoomOut()
         {
@@ -369,43 +329,73 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// <param name="eventArgs">event args</param>
         private void PositionSizeControllerOnEvtAutoRepositionScannerStop(object sender, EventArgs eventArgs)
         {
-            _dialogCommon.GetAnimationManager().Resume();
-            var scanner = (_previewScreen as IScannerPanel);
+            PanelCommon.AnimationManager.Resume();
+            var scanner = (_previewScanner as IScannerPanel);
             if (scanner != null)
             {
+                scanner.ScannerCommon.PositionSizeController.ManualPosition = Context.AppWindowPosition;
+                scanner.ScannerCommon.PositionSizeController.AutoPosition = false;
+
                 scanner.ScannerCommon.PositionSizeController.EvtAutoRepositionScannerStop -=
                     PositionSizeControllerOnEvtAutoRepositionScannerStop;
             }
+
             Windows.SetOpacity(this, 1.0f);
         }
 
         /// <summary>
-        /// Form is closing. Release resources
+        /// Form is closing. Releases resources
         /// </summary>
         private void ResizeScannerScreen_FormClosing(object sender, FormClosingEventArgs e)
         {
-            unsubscribeToButtonEvents();
+            unsubscribeFromButtonEvents();
 
-            _previewScreen.Close();
+            if (_windowOverlapWatchdog != null)
+            {
+                _windowOverlapWatchdog.Dispose();
+            }
+
+            _previewScanner.Close();
             _dialogCommon.OnClosing();
         }
 
         /// <summary>
-        /// Form has been loaded. Initialize resources
+        /// Form has been loaded. Initializes resources
         /// </summary>
         private void ResizeScannerScreen_Load(object sender, EventArgs e)
         {
-            var screen = Context.AppPanelManager.CreatePanel(PanelClasses.Alphabet) as IPanel;
-            _previewScreen = screen as Form;
+            var panel = Context.AppPanelManager.CreatePanel(PanelClasses.Alphabet) as IPanel;
+            _previewScanner = panel as Form;
 
-            _previewScreenInterface = screen as IScannerPreview;
+            _previewScreenInterface = panel as IScannerPreview;
             _previewScreenInterface.PreviewMode = true;
-            _previewScreen.Show();
 
-            Windows.SetWindowPosition(_previewScreen, Context.AppWindowPosition);
+            var scannerPanel = panel as IScannerPanel;
+
+            // we are going to manually set the position of the scanner below
+            scannerPanel.ScannerCommon.PositionSizeController.AutoPosition = false;
+
+            _previewScanner.Show();
+
+            var position = Context.AppWindowPosition;
+            if (position == Windows.WindowPosition.CenterScreen)
+            {
+                position = CoreGlobals.AppPreferences.ScannerPosition;
+            }
+
+            if (position == Windows.WindowPosition.CenterScreen)
+            {
+                position = Windows.WindowPosition.MiddleRight;
+            }
+
+            var scanner = _previewScanner as IScannerPanel;
+
+            scanner.ScannerCommon.PositionSizeController.ManualPosition = position;
+
+            _windowOverlapWatchdog = new WindowOverlapWatchdog(this, true);
 
             _dialogCommon.OnLoad();
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
 
         /// <summary>
@@ -414,7 +404,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// </summary>
         private void subscribeToButtonEvents()
         {
-            foreach (var widget in _dialogCommon.GetRootWidget().Children)
+            foreach (var widget in PanelCommon.RootWidget.Children)
             {
                 widget.EvtHighlightOn += widget_EvtHighlightOn;
                 widget.EvtHighlightOff += widget_EvtHighlightOff;
@@ -424,9 +414,9 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         /// <summary>
         /// Unsubscribe from button events
         /// </summary>
-        private void unsubscribeToButtonEvents()
+        private void unsubscribeFromButtonEvents()
         {
-            foreach (var widget in _dialogCommon.GetRootWidget().Children)
+            foreach (var widget in PanelCommon.RootWidget.Children)
             {
                 widget.EvtHighlightOn -= widget_EvtHighlightOn;
                 widget.EvtHighlightOff -= widget_EvtHighlightOff;
@@ -460,7 +450,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 help = buttonWidget.GetWidgetAttribute().ToolTip;
             }
 
-            Windows.SetText(labelToolTip, help);
+            Windows.SetText(labelToolTip, R.GetString(help));
         }
     }
 }

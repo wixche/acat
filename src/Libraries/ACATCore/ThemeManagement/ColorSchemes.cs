@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ColorSchemes.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,49 +20,13 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Xml;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.ThemeManagement
 {
     /// <summary>
     /// Encapsulates a list of color scheme objects for the various ui elements
-    /// and for the various screen types such as dialogs, scanners, buttons
+    /// and for the various panel types such as dialogs, scanners, buttons
     /// Each color scheme object contains the background/foreground color or image
     /// to be used in the various states of the UI element such as highlighted,
     /// normal, selected etc.
@@ -150,15 +114,15 @@ namespace ACAT.Lib.Core.ThemeManagement
 
         /// <summary>
         /// Parses the xml node and creates a color scheme object form it. The
-        /// skin dir path contains the assets for the color scheme
+        /// theme dir path contains the assets for the color scheme
         /// </summary>
         /// <param name="node">the xml node</param>
-        /// <param name="skinDir">path to the assets</param>
+        /// <param name="themeDir">path to the assets</param>
         /// <returns>Color scheme collection</returns>
-        public static ColorSchemes Create(XmlNode node, String skinDir)
+        public static ColorSchemes Create(XmlNode node, String themeDir)
         {
             var colorSchemes = new ColorSchemes();
-            colorSchemes.loadAndAddColorScheme(node, skinDir);
+            colorSchemes.loadAndAddColorScheme(node, themeDir);
 
             return colorSchemes;
         }
@@ -173,6 +137,16 @@ namespace ACAT.Lib.Core.ThemeManagement
             // Prevent finalization code for this object
             // from executing a second time.
             GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Does the specified scheme exist?
+        /// </summary>
+        /// <param name="scheme">Name of the scheme</param>
+        /// <returns>true if it does</returns>
+        public bool Exists(String scheme)
+        {
+            return _colorsTable.ContainsKey(scheme.ToLower().Trim());
         }
 
         /// <summary>
@@ -224,8 +198,8 @@ namespace ACAT.Lib.Core.ThemeManagement
         /// adds it to the collection.
         /// </summary>
         /// <param name="node">xml node to parse</param>
-        /// <param name="skinDir">directory where assets are located</param>
-        private void loadAndAddColorScheme(XmlNode node, String skinDir)
+        /// <param name="themeDir">directory where assets are located</param>
+        private void loadAndAddColorScheme(XmlNode node, String themeDir)
         {
             var colorSchemeNodes = node.SelectNodes("ColorScheme");
 
@@ -237,7 +211,7 @@ namespace ACAT.Lib.Core.ThemeManagement
             // load each scheme from the config file
             foreach (XmlNode colorSchemeNode in colorSchemeNodes)
             {
-                var colorScheme = ColorScheme.Create(colorSchemeNode, skinDir);
+                var colorScheme = ColorScheme.Create(colorSchemeNode, themeDir);
                 var name = colorScheme.Name.ToLower();
                 if (!_colorsTable.ContainsKey(name))
                 {

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="USBDevice.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,48 +19,15 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using ACAT.Lib.Core.Utility;
 
 namespace ACAT.Lib.Core.ActuatorManagement
 {
     /// <summary>
-    /// Opens a HID device and reads data from it
+    /// Opens a HID device and reads data from it.  Notifies
+    /// through events when data comes in, when the device
+    /// connects and when it is disconnected.
     /// </summary>
     public class USBDevice : IDisposable
     {
@@ -154,7 +121,7 @@ namespace ACAT.Lib.Core.ActuatorManagement
         }
 
         /// <summary>
-        /// Close the hid device.  This has to be called
+        /// Closes the hid device.  This has to be called
         /// for all the threads to be closed properly
         /// </summary>
         public void Close()
@@ -173,7 +140,8 @@ namespace ACAT.Lib.Core.ActuatorManagement
         }
 
         /// <summary>
-        /// Stop reading
+        /// Stops reading data from the device, kills
+        /// the read thread
         /// </summary>
         public void EndRead()
         {
@@ -194,7 +162,8 @@ namespace ACAT.Lib.Core.ActuatorManagement
         }
 
         /// <summary>
-        /// Opens the Hid device
+        /// Enumerates all the hid devices, locates
+        /// the device of interest and opens it.
         /// </summary>
         /// <returns>true on success</returns>
         public bool Open()
@@ -243,7 +212,8 @@ namespace ACAT.Lib.Core.ActuatorManagement
         }
 
         /// <summary>
-        /// Disposer
+        /// Disposer.  Disposes resources.  Closes the
+        /// handles
         /// </summary>
         /// <param name="disposeManagedResources">dispose managed resources</param>
         protected void Dispose(bool disposeManagedResources)
@@ -301,8 +271,7 @@ namespace ACAT.Lib.Core.ActuatorManagement
 
             if (_usbInterop.GetPreparsedData(_usbInterop.HidHandle, ref preParsedData) != 0)
             {
-                int code = _usbInterop.GetCaps(preParsedData);
-                int reportLength = _usbInterop.HidCaps.InputReportByteLength;
+                _usbInterop.GetCaps(preParsedData);
 
                 while (!_quitReadThread)
                 {

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="DialogCommon.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,18 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Security.Permissions;
-using System.Windows.Automation;
-using System.Windows.Forms;
+using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.AnimationManagement;
 using ACAT.Lib.Core.Interpreter;
 using ACAT.Lib.Core.ThemeManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Security.Permissions;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -75,13 +40,13 @@ namespace ACAT.Lib.Core.PanelManagement
     /// events are handled and makes it easier for the developer to add
     /// new dialogs to ACAT.
     /// A dialog form will contain a DialogCommon field and
-    /// call the methods in this class whereever they are needed. The
-    /// documentation for the methods have information on when these
+    /// call the methods in this class whereever they are needed. Refer
+    /// to the documentation for the methods in this class for info on when these
     /// methods need to be invoked.
     /// This class creates the WidgetManager and AnimationManager objects
     /// required by the form and has getters for the various fields.
     /// </summary>
-    public class DialogCommon : IDisposable
+    public class DialogCommon : IDisposable, IPanelCommon
     {
         /// <summary>
         /// All dialog forms should derive from IDialogPanel
@@ -109,7 +74,7 @@ namespace ACAT.Lib.Core.PanelManagement
         private bool _disposed;
 
         /// <summary>
-        /// Name of the form in the screen config map
+        /// Name of the form in the Panel config map
         /// </summary>
         private String _panelName;
 
@@ -145,6 +110,7 @@ namespace ACAT.Lib.Core.PanelManagement
             _panelName = String.Empty;
             _dialogPanel = (IDialogPanel)_form;
             _syncLock = new SyncLock();
+            AutoDockScanner = true;
         }
 
         /// <summary>
@@ -153,12 +119,51 @@ namespace ACAT.Lib.Core.PanelManagement
         private delegate void StopDelegate();
 
         /// <summary>
+        /// Gets the Animation Manager object
+        /// </summary>
+        public AnimationManager AnimationManager { get { return _animationManager; } }
+
+        /// <summary>
+        /// Get/sets whether a scanner will be docked to the dialog
+        /// or not.  The scanner is typically used to enter data
+        /// into the form.  If set to false, the scanner will be displayed
+        /// in its default position.
+        /// </summary>
+        public bool AutoDockScanner { get; set; }
+
+        /// <summary>
+        /// Gets the panel config id for this panel
+        /// </summary>
+        public Guid ConfigId { get; private set; }
+
+        /// <summary>
+        /// Gets the display mode of the panel
+        /// </summary>
+        public DisplayModeTypes DisplayMode { get; private set; }
+
+        /// <summary>
+        /// Gets the object that manages the size and position
+        /// of the panel
+        /// </summary>
+        public ScannerPositionSizeController PositionSizeController { get { return null; } }
+
+        /// <summary>
+        /// Gets the widget that reprensents the form
+        /// </summary>
+        public Widget RootWidget { get { return _rootWidget; } }
+
+        /// <summary>
         /// Returns the synchronization object
         /// </summary>
         public SyncLock SyncObj
         {
             get { return _syncLock; }
         }
+
+        /// <summary>
+        /// Gets the WidgetManager object
+        /// </summary>
+        public WidgetManager WidgetManager { get { return _widgetManager; } }
 
         /// <summary>
         /// Sets the style of the form.  No sys menu
@@ -173,6 +178,23 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
+        /// Check to see if a command should be enabled or not.
+        /// This depends on the context.   The arg parameter
+        /// contains the widget/command object in question.
+        /// </summary>
+        /// <param name="arg">Argument</param>
+        public void CheckCommandEnabled(CommandEnabledArg arg)
+        {
+            if (_syncLock.IsClosing())
+            {
+                return;
+            }
+
+            arg.Handled = true;
+            arg.Enabled = false;
+        }
+
+        /// <summary>
         /// Disposes the object
         /// </summary>
         public void Dispose()
@@ -182,33 +204,6 @@ namespace ACAT.Lib.Core.PanelManagement
             // Prevent finalization code for this object
             // from executing a second time.
             GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Returns the animation manager object
-        /// </summary>
-        /// <returns>animation manager object</returns>
-        public AnimationManager GetAnimationManager()
-        {
-            return _animationManager;
-        }
-
-        /// <summary>
-        /// Returns the root widget manager
-        /// </summary>
-        /// <returns></returns>
-        public Widget GetRootWidget()
-        {
-            return _rootWidget;
-        }
-
-        /// <summary>
-        /// Returns the widget manager object
-        /// </summary>
-        /// <returns>Widget manager object</returns>
-        public WidgetManager GetWidgetManager()
-        {
-            return _widgetManager;
         }
 
         /// <summary>
@@ -236,32 +231,30 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Initializes the class using the panel name.  Call this in
-        /// the constructor of the form.
-        /// </summary>
-        /// <param name="panelClass">name/class of the panel</param>
-        /// <returns>true on success</returns>
-        public bool Initialize(String panelClass)
-        {
-            _panelName = panelClass;
-            return Initialize();
-        }
-
-        /// <summary>
         /// If the form doesn't have a panel name, call this in the
         /// constructor of the form
         /// </summary>
         /// <returns>true on success</returns>
-        public bool Initialize()
+        public bool Initialize(StartupArg startupArg)
         {
-            bool retVal = initWidgetManager();
-            if (retVal)
+            _panelName = startupArg.PanelClass;
+
+            var panelConfigMapEntry = PanelConfigMap.GetPanelConfigMapEntry(startupArg.PanelClass);
+            if (panelConfigMapEntry == null) // did not find the panel
             {
-                retVal = initAnimationManager();
+                return false;
             }
 
-            _form.TopMost = true;
-            _form.Paint += Form_Paint;
+            bool retVal = initWidgetManager(panelConfigMapEntry);
+            if (retVal)
+            {
+                retVal = initAnimationManager(panelConfigMapEntry);
+            }
+
+            Windows.SetTopMost(_form);
+
+            PanelManager.Instance.EvtScannerShow += Instance_EvtScannerShow;
+            Windows.EvtWindowPositionChanged += Windows_EvtWindowPositionChanged;
 
             Windows.SetWindowPositionAndNotify(_form, Windows.WindowPosition.CenterScreen);
 
@@ -279,8 +272,7 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Call this function from the FormClosing override in
-        /// Form
+        /// Call this function from the FormClosing override in Form
         /// </summary>
         /// <param name="e">event args</param>
         public void OnFormClosing(FormClosingEventArgs e)
@@ -306,11 +298,13 @@ namespace ACAT.Lib.Core.PanelManagement
         public void OnLoad()
         {
             Resize(_form.Size);
+            Windows.ActivateForm(_form);
             subscribeToEvents();
         }
 
         /// <summary>
-        /// Pause handler.  Pauses the animation manager
+        /// Pause handler.  Pauses the animation manager and any
+        /// watchdogs that are active
         /// </summary>
         public void OnPause()
         {
@@ -323,10 +317,13 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Resume handler.  Resumes the animation manager
+        /// Resume handler.  Resumes the animation manager and
+        /// any watchdogs that are active
         /// </summary>
         public void OnResume()
         {
+            Windows.SetWindowPositionAndNotify(_form, Windows.WindowPosition.CenterScreen);
+
             if (_windowOverlapWatchdog != null)
             {
                 _windowOverlapWatchdog.Resume();
@@ -364,6 +361,8 @@ namespace ACAT.Lib.Core.PanelManagement
 
                 if (disposing)
                 {
+                    PanelManager.Instance.EvtScannerShow -= Instance_EvtScannerShow;
+
                     // dispose all managed resources.
                     Log.Debug();
 
@@ -405,7 +404,8 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// If the widget requires a scanner to interact, create the scanner
+        /// If the widget requires a scanner to interact, create the scanner. For
+        /// eg if the user want to enter text into a TextBox in the dialog.
         /// </summary>
         /// <param name="widget"></param>
         private void createAndShowScannerForWidget(Widget widget)
@@ -439,6 +439,7 @@ namespace ACAT.Lib.Core.PanelManagement
             var startupArg = new StartupArg
             {
                 DialogMode = true,
+                PanelClass = widget.Panel,
                 FocusedElement = AutomationElement.FromHandle(widget.UIControl.Handle),
             };
 
@@ -446,33 +447,13 @@ namespace ACAT.Lib.Core.PanelManagement
         }
 
         /// <summary>
-        /// Draw a border around the form.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void Form_Paint(object sender, PaintEventArgs e)
-        {
-            //RoundedCornerControl.DrawBorder(_formGraphicsPath, e, Color.Black);
-        }
-
-        /// <summary>
-        /// Returns the config file for this form.
-        /// </summary>
-        /// <returns></returns>
-        private String getConfigFile()
-        {
-            return !String.IsNullOrEmpty(_panelName) ?
-                            PanelConfigMap.GetConfigFileForPanel(_panelName) :
-                            PanelConfigMap.GetConfigFileForScreen(_form.GetType());
-        }
-
-        /// <summary>
         /// Loads all animations from the configfile for the form
         /// </summary>
-        private bool initAnimationManager()
+        private bool initAnimationManager(PanelConfigMapEntry panelConfigMapEntry)
         {
             _animationManager = new AnimationManager();
-            bool retVal = _animationManager.Init(getConfigFile());
+
+            bool retVal = _animationManager.Init(panelConfigMapEntry);
             if (!retVal)
             {
                 Log.Error("Error initializing animation manager");
@@ -485,13 +466,13 @@ namespace ACAT.Lib.Core.PanelManagement
         /// Initializes the widget manager.  Load the widget layout,
         /// set the color scheme and get the root widget object
         /// </summary>
-        private bool initWidgetManager()
+        private bool initWidgetManager(PanelConfigMapEntry panelConfigMapEntry)
         {
             _widgetManager = new WidgetManager(_form);
 
             _widgetManager.Layout.SetColorScheme(ColorSchemes.DialogSchemeName);
 
-            bool retVal = _widgetManager.Initialize(getConfigFile());
+            bool retVal = _widgetManager.Initialize(panelConfigMapEntry.ConfigFileName);
 
             if (!retVal)
             {
@@ -502,11 +483,50 @@ namespace ACAT.Lib.Core.PanelManagement
                 _rootWidget = _widgetManager.RootWidget;
                 if (String.IsNullOrEmpty(_rootWidget.SubClass))
                 {
-                    _rootWidget.SubClass = PanelClasses.PanelCategory.Dialog.ToString();
+                    _rootWidget.SubClass = PanelCategory.Dialog.ToString();
                 }
             }
 
             return retVal;
+        }
+
+        /// <summary>
+        /// Event handler for when a scanner is shown.  Dock it to the dialog form.
+        /// The scanner is a companion to the dialog
+        /// </summary>
+        /// <param name="sender">event sender</param>
+        /// <param name="arg">event args</param>
+        private void Instance_EvtScannerShow(object sender, ScannerShowEventArg arg)
+        {
+            if (AutoDockScanner &&
+                Windows.GetVisible(_form) &&
+                arg.Scanner != _form &&
+                Windows.GetOpacity(_form) != 0.0f)
+            {
+                Windows.WindowPosition position = Context.AppWindowPosition;
+
+                if (position == Windows.WindowPosition.CenterScreen)
+                {
+                    position = CoreGlobals.AppPreferences.ScannerPosition;
+                }
+
+                if (position == Windows.WindowPosition.CenterScreen)
+                {
+                    position = Windows.WindowPosition.MiddleRight;
+                }
+
+                if (((IPanel) arg.Scanner).PanelCommon.DisplayMode != DisplayModeTypes.Popup)
+                {
+                    Windows.DockWithScanner(_form, arg.Scanner as Form, position, false);
+                }
+
+                if (_form.Left < 0)
+                {
+                    _form.Left = 0;
+                }
+
+                Windows.SetTopMost(arg.Scanner as Form);
+            }
         }
 
         /// <summary>
@@ -529,7 +549,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         private void subscribeToEvents()
         {
-            GetAnimationManager().Interpreter.EvtRun += Interpreter_EvtRun;
+            AnimationManager.Interpreter.EvtRun += Interpreter_EvtRun;
 
             var widgetList = new List<Widget>();
 
@@ -549,13 +569,13 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         private void unsubscribeFromEvents()
         {
-            GetAnimationManager().Interpreter.EvtRun -= Interpreter_EvtRun;
+            AnimationManager.Interpreter.EvtRun -= Interpreter_EvtRun;
         }
 
         /// <summary>
-        /// The user actuated a widget.  perform the necessary action.  If the
-        ///  widget requires a scanner to interact (text boxes may require the
-        ///  alphabet scanner for eg) active the scanner
+        /// The user actuated a widget. Performs the necessary action.  If the
+        /// widget requires a scanner to interact (text boxes may require the
+        /// alphabet scanner for eg) activates the scanner
         /// </summary>
         private void widget_EvtActuated(object sender, WidgetEventArgs e)
         {
@@ -584,6 +604,36 @@ namespace ACAT.Lib.Core.PanelManagement
 
                     createAndShowScannerForWidget(widget);
                 }));
+            }
+        }
+
+        /// <summary>
+        /// Event handler for window position changed.  IF there is a companion
+        /// scanner, dock with it.
+        /// </summary>
+        /// <param name="form">form whose position changed</param>
+        /// <param name="position">the position</param>
+        private void Windows_EvtWindowPositionChanged(Form form, Windows.WindowPosition position)
+        {
+            if (AutoDockScanner &&
+                (form is IScannerPanel) &&
+                Windows.GetVisible(_form) &&
+                form != _form &&
+                Windows.GetOpacity(_form) != 0.0f)
+            {
+                if (((IPanel) form).PanelCommon.DisplayMode != DisplayModeTypes.Popup)
+                {
+                    Windows.DockWithScanner(_form, form, Context.AppWindowPosition, false);
+                }
+
+                Log.Debug("Left: " + _form.Left);
+
+                if (_form.Left < 0)
+                {
+                    _form.Left = 0;
+                }
+
+                Windows.SetTopMost(form);
             }
         }
     }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Theme.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,55 +18,26 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.ThemeManagement
 {
     /// <summary>
-    /// Contains all the attribtues for a skin. This includes
-    /// the color schemes for all the various screen elements.
+    /// Contains all the attribtues for a Theme. This includes
+    /// the color schemes for all the various UI elements such
+    /// as Scanners, Dialogs, Menus, buttons in scanners etc.
+    /// The theme is loaded from an XML file
     /// </summary>
     public class Theme : IDisposable
     {
+        /// <summary>
+        /// Name of the preview screnshot image file
+        /// </summary>
+        public const String PreviewScannerImageName = "Preview.png";
+
         /// <summary>
         /// Has this object been disposed?
         /// </summary>
@@ -103,15 +74,15 @@ namespace ACAT.Lib.Core.ThemeManagement
         }
 
         /// <summary>
-        /// Class factory to create a Theme object with the specified name. skinDir
-        /// directory contains all the assets for the Theme. Skinfile is the xml
+        /// Class factory to create a Theme object with the specified name. themeDir
+        /// directory contains all the assets for the Theme. themeFile is the xml
         /// file that contains references to all the theme assets.
         /// </summary>
         /// <param name="themeName">Name of the theme</param>
-        /// <param name="skinDir">directory where theme assets are located</param>
+        /// <param name="themeDir">directory where theme assets are located</param>
         /// <param name="themeFile">name of the theme config file</param>
         /// <returns></returns>
-        public static Theme Create(String themeName, String skinDir, String themeFile)
+        public static Theme Create(String themeName, String themeDir, String themeFile)
         {
             Theme theme = null;
 
@@ -127,10 +98,10 @@ namespace ACAT.Lib.Core.ThemeManagement
                 doc.Load(themeFile);
 
                 // create the colorschemes object by parsing the colorschemes nodes
-                var colorSchemesNode = doc.SelectSingleNode("/ACAT/Skin/ColorSchemes");
+                var colorSchemesNode = doc.SelectSingleNode("/ACAT/Theme/ColorSchemes");
                 if (colorSchemesNode != null)
                 {
-                    theme = new Theme(themeName) { Colors = ColorSchemes.Create(colorSchemesNode, skinDir) };
+                    theme = new Theme(themeName) { Colors = ColorSchemes.Create(colorSchemesNode, themeDir) };
                 }
             }
             catch (Exception ex)

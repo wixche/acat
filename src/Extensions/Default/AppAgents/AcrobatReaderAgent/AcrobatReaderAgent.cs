@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AcrobatReaderAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension.AppAgents.AcrobatReader;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Extensions.Default.AppAgents.AcrobatReaderAgent
 {
@@ -65,7 +30,9 @@ namespace ACAT.Extensions.Default.AppAgents.AcrobatReaderAgent
     /// Base class does all the heavy-lifting.  Override functions
     /// as required customize
     /// </summary>
-    [DescriptorAttribute("9684490F-52DE-4BF4-9C9D-548CD2696F65", "Acrobat Reader Agent", "Application Agent for Acrobat Reader")]
+    [DescriptorAttribute("9684490F-52DE-4BF4-9C9D-548CD2696F65",
+                            "Acrobat Reader Agent",
+                            "Manages interactions with Adboe Acrobat Reader to browse PDF files")]
     internal class AcrobatReaderAgent : AcrobatReaderAgentBase
     {
         /// <summary>
@@ -78,13 +45,33 @@ namespace ACAT.Extensions.Default.AppAgents.AcrobatReaderAgent
         /// </summary>
         private const string SettingsFileName = "AcrobatReaderAgentSettings.xml";
 
-        // override functions here if necessary
+        /// <summary>
+        /// Initializes an instance of the class
+        /// </summary>
         public AcrobatReaderAgent()
         {
             AcrobatReaderAgentSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
             Settings = AcrobatReaderAgentSettings.Load();
 
             autoSwitchScanners = Settings.AutoSwitchScannerEnable;
+        }
+
+        /// <summary>
+        /// Returns the default settings
+        /// </summary>
+        /// <returns>Default settings object</returns>
+        public override IPreferences GetDefaultPreferences()
+        {
+            return PreferencesBase.LoadDefaults<AcrobatReaderAgentSettings>();
+        }
+
+        /// <summary>
+        /// Returns the settings for this agent
+        /// </summary>
+        /// <returns>The settings object</returns>
+        public override IPreferences GetPreferences()
+        {
+            return Settings;
         }
     }
 }

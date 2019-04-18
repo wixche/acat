@@ -1,7 +1,7 @@
-﻿////////////////////////////////////////////////////////////////////////////
+﻿/////////////////////////////////////////////////////////////////////////////
 // <copyright file="Splash.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,46 +18,11 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
-using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Threading;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -70,39 +35,34 @@ namespace ACAT.Lib.Core.PanelManagement
     public class Splash
     {
         /// <summary>
-        /// Event that controls closing of the splash screen
+        /// The splash screen form
         /// </summary>
-        private readonly ManualResetEvent _closeEvent = new ManualResetEvent(false);
+        private SplashScreen _form;
 
         /// <summary>
         /// The path to the image file
         /// </summary>
-        private readonly String _image;
+        private String _image;
 
         /// <summary>
         /// Line 1 of the text to be displayed
         /// </summary>
-        private readonly String _line1;
+        private String _line1;
 
         /// <summary>
         /// Line 2 of the text to be displayed
         /// </summary>
-        private readonly String _line2;
+        private String _line2;
 
         /// <summary>
         /// Line 3 of the text to be displayed
         /// </summary>
-        private readonly String _line3;
+        private String _line3;
 
         /// <summary>
-        /// Background worker object
+        /// Line 4 of the text to be displayed
         /// </summary>
-        private BackgroundWorker _backgroundWorker = new BackgroundWorker();
-
-        /// <summary>
-        /// The splash screen form
-        /// </summary>
-        private SplashScreen _form;
+        private String _line4;
 
         /// <summary>
         /// Minimum time in ms the splash screen has to stay up
@@ -115,20 +75,66 @@ namespace ACAT.Lib.Core.PanelManagement
         private Stopwatch _stopWatch;
 
         /// <summary>
+        /// Thread to show the splash screen
+        /// </summary>
+        private Thread _thread;
+
+        /// <summary>
+        /// Initializes a new instance of the class.  Fills in details
+        /// from the assembly info (version, copyright etc)
+        /// </summary>
+        /// <param name="minUpTime">min time to stay on</param>
+        public Splash(int minUpTime = 0)
+        {
+            initSplash(FileUtils.GetImagePath("SplashScreenImage.png"), null, null, null, null, minUpTime);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the class.  Fills in details
+        /// from the assembly info (version, copyright etc)
+        /// </summary>
+        /// <param name="image">Splash image</param>
+        /// <param name="minUpTime">min time to stay on</param>
+        public Splash(String image, int minUpTime = 0)
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+
+            // get appname and copyright information
+            object[] attributes = assembly.GetCustomAttributes(typeof(AssemblyTitleAttribute), false);
+            var appName = (attributes.Length != 0)
+                ? ((AssemblyTitleAttribute)attributes[0]).Title
+                : String.Empty;
+
+            var appVersion = "Version " + assembly.GetName().Version;
+            attributes = assembly.GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false);
+            var appCopyright = (attributes.Length != 0)
+                ? ((AssemblyCopyrightAttribute)attributes[0]).Copyright
+                : String.Empty;
+
+            initSplash(image, appName, appVersion, String.Empty, appCopyright, minUpTime);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the class.
+        /// </summary>
+        /// <param name="line1">First line of text</param>
+        /// <param name="line2">Second line of text</param>
+        /// <param name="line3">Third line of text</param>
+        public Splash(String line1 = null, String line2 = null, String line3 = null, String line4 = null, int minUpTime = 0)
+        {
+            initSplash(FileUtils.GetImagePath("SplashScreenImage.png"), line1, line2, line3, line4, minUpTime);
+        }
+
+        /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
         /// <param name="image">Path to the image</param>
         /// <param name="line1">First line of text</param>
         /// <param name="line2">Second line of text</param>
         /// <param name="line3">Third line of text</param>
-        public Splash(String image, String line1 = null, String line2 = null, String line3 = null, int minUpTime = 0)
+        public Splash(String image, String line1 = null, String line2 = null, String line3 = null, String line4 = null, int minUpTime = 0)
         {
-            _line1 = line1;
-            _line2 = line2;
-            _line3 = line3;
-            _image = image;
-            _minUpTime = minUpTime;
-            _stopWatch = new Stopwatch();
+            initSplash(image, line1, line2, line3, line4, minUpTime);
         }
 
         /// <summary>
@@ -145,16 +151,10 @@ namespace ACAT.Lib.Core.PanelManagement
                     _form.Dismiss();
                     _form = null;
                 }
-
-                if (_backgroundWorker != null)
-                {
-                    _backgroundWorker.CancelAsync();
-                    _backgroundWorker.Dispose();
-                    _backgroundWorker = null;
-                }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Debug(ex.ToString());
             }
         }
 
@@ -164,38 +164,72 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Show()
         {
-            _backgroundWorker.WorkerSupportsCancellation = true;
-            _backgroundWorker.WorkerReportsProgress = false;
-            _backgroundWorker.RunWorkerCompleted += backgroundWorker_RunWorkerCompleted;
-            _backgroundWorker.DoWork += backgroundWorker_DoWork;
+            _thread = new Thread(showSplash) { IsBackground = true };
+            _thread.SetApartmentState(ApartmentState.STA);
             _stopWatch.Start();
-            _backgroundWorker.RunWorkerAsync();
+            _thread.Start();
         }
 
         /// <summary>
-        /// The work handler function flr the background worker
+        /// Initializes class
         /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void backgroundWorker_DoWork(object sender, DoWorkEventArgs e)
+        /// <param name="image">Path to the image</param>
+        /// <param name="line1">First line of text</param>
+        /// <param name="line2">Second line of text</param>
+        /// <param name="line3">Third line of text</param>
+        /// <param name="minUpTime">Minimun length of time splash should be up</param>
+        private void initSplash(String image, String line1 = null, String line2 = null, String line3 = null, String line4 = null, int minUpTime = 0)
         {
-            String appName = _line1 ?? String.Empty;
-            String appVersion = _line2 ?? String.Empty;
-            String appCopyright = _line3 ?? String.Empty;
-            _closeEvent.Reset();
-            _form = new SplashScreen(appName, appVersion, appCopyright, _image);
+            var assembly = Assembly.GetEntryAssembly();
+            // get appname and copyright information
+            object[] attributes = assembly.GetCustomAttributes(typeof(AssemblyTitleAttribute), false);
+
+            var appName = (attributes.Length != 0) ?
+                            ((AssemblyTitleAttribute)attributes[0]).Title :
+                            String.Empty;
+
+            var appVersion = "Version " + assembly.GetName().Version;
+
+            attributes = assembly.GetCustomAttributes(typeof(AssemblyCompanyAttribute), false);
+
+            var companyName = (attributes.Length != 0) ?
+                                ((AssemblyCompanyAttribute)attributes[0]).Company :
+                                String.Empty;
+
+            attributes = assembly.GetCustomAttributes(typeof(AssemblyCopyrightAttribute), false);
+
+            var appCopyright = (attributes.Length != 0)
+                ? ((AssemblyCopyrightAttribute)attributes[0]).Copyright
+                : String.Empty;
+
+            _line1 = line1 ?? appName;
+            _line2 = line2 ?? appVersion;
+            _line3 = line3 ?? companyName;
+            _line4 = line4 ?? appCopyright;
+            _image = image;
+            _minUpTime = minUpTime;
+
+            _stopWatch = new Stopwatch();
+        }
+
+        /// <summary>
+        /// Displays the splash screen
+        /// </summary>
+        private void showSplash()
+        {
+            var line1 = _line1 ?? String.Empty;
+            var line2 = _line2 ?? String.Empty;
+            var line3 = _line3 ?? String.Empty;
+            var line4 = _line4 ?? String.Empty;
+
+            _form = new SplashScreen(line1, line2, line3, line4, _image);
+
             _form.ShowDialog();
         }
 
         /// <summary>
-        /// Background worker completed
+        /// Waits until the minimum uptime has elapsed
         /// </summary>
-        /// <param name="sender">event sender</param>
-        /// <param name="e">event args</param>
-        private void backgroundWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {
-        }
-
         private void waitUntilUpTime()
         {
             if (_stopWatch.IsRunning && _minUpTime > 0)
@@ -204,6 +238,7 @@ namespace ACAT.Lib.Core.PanelManagement
                 if (elapsedTime < _minUpTime)
                 {
                     long timeToSleep = _minUpTime - elapsedTime;
+
                     Thread.Sleep((int)timeToSleep);
                 }
             }

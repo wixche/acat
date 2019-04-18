@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="StatusBarController.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,44 +18,9 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -67,7 +32,7 @@ namespace ACAT.Lib.Core.PanelManagement
     /// can be displayed in the UI control that is assigned to
     /// the shift key.
     /// Each modifier key has a UI control (like a Forms.Label object)
-    /// which can display the status of the modifier key
+    /// which can display the status of the modifier key.
     /// </summary>
     public class StatusBarController
     {
@@ -75,52 +40,45 @@ namespace ACAT.Lib.Core.PanelManagement
         /// The status bar object that holds the UI controls that
         /// represent the status of the modifier keys
         /// </summary>
-        private readonly ScannerStatusBar _statusBar;
+        private ScannerStatusBar _statusBar;
 
         /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
         /// <param name="statusBar"></param>
-        public StatusBarController(ScannerStatusBar statusBar)
+        public StatusBarController(ScannerStatusBar statusBar = null)
         {
             _statusBar = statusBar;
         }
 
         /// <summary>
-        /// Updates the status bar with the current status
-        /// of the modifier keys
+        /// Get/sets the statusbar object
         /// </summary>
-        public void UpdateStatusBar()
+        public ScannerStatusBar StatusBar
         {
-            if (_statusBar != null)
-            {
-                UpdateShiftStatus();
-                UpdateCtrlStatus();
-                UpdateAltStatus();
-                UpdateFuncStatus();
-                UpdateLockStatus(CoreGlobals.AppPreferences.AutoSaveScannerLastPosition);
-            }
+            get { return _statusBar; }
+            set { _statusBar = value; }
         }
 
         /// <summary>
         /// Updates the control that displays the status of the
-        /// shift key.
+        /// Alt key.
         /// </summary>
-        public void UpdateShiftStatus()
+        public void UpdateAltStatus()
         {
-            if (_statusBar != null && _statusBar.ShiftStatus != null)
+            if (_statusBar != null && _statusBar.AltStatus != null)
             {
                 String label = String.Empty;
-                if (KeyStateTracker.IsStickyShiftOn())
+                if (KeyStateTracker.IsStickyAltOn())
                 {
-                    label = "a";
+                    label = "ALT LOCK";
                 }
-                else if (KeyStateTracker.IsShiftOn())
+                else if (KeyStateTracker.IsAltOn())
                 {
-                    label = "b";
+                    label = "ALT";
                 }
 
-                Windows.SetText(_statusBar.ShiftStatus, label);
+                setText(_statusBar.AltStatus, label);
             }
         }
 
@@ -135,80 +93,67 @@ namespace ACAT.Lib.Core.PanelManagement
                 String label = String.Empty;
                 if (KeyStateTracker.IsStickyCtrlOn())
                 {
-                    label = "g";
+                    label = "CTRL LOCK";
                 }
                 else if (KeyStateTracker.IsCtrlOn())
                 {
-                    label = "h";
+                    label = "CTRL";
                 }
 
-                Windows.SetText(_statusBar.CtrlStatus, label);
+                setText(_statusBar.CtrlStatus, label);
             }
         }
 
         /// <summary>
         /// Updates the control that displays the status of the
-        /// Alt key.
+        /// shift key.
         /// </summary>
-        public void UpdateAltStatus()
+        public void UpdateShiftStatus()
         {
-            if (_statusBar != null && _statusBar.AltStatus != null)
+            if (_statusBar != null && _statusBar.ShiftStatus != null)
             {
                 String label = String.Empty;
-                if (KeyStateTracker.IsStickyAltOn())
+                if (KeyStateTracker.IsStickyShiftOn())
                 {
-                    label = "c";
+                    label = "CAPS";
                 }
-                else if (KeyStateTracker.IsAltOn())
+                else if (KeyStateTracker.IsShiftOn())
                 {
-                    label = "d";
+                    label = "SHIFT";
                 }
 
-                Windows.SetText(_statusBar.AltStatus, label);
+                setText(_statusBar.ShiftStatus, label);
             }
         }
 
         /// <summary>
-        /// Updates the control that displays the status of the
-        /// Function key.
+        /// Updates the status bar with the current status
+        /// of the modifier keys
         /// </summary>
-        public void UpdateFuncStatus()
+        public void UpdateStatusBar()
         {
-            if (_statusBar != null && _statusBar.FuncStatus != null)
+            if (_statusBar != null)
             {
-                String label = String.Empty;
-                if (KeyStateTracker.IsFuncOn())
-                {
-                    label = "f";
-                }
-
-                Windows.SetText(_statusBar.FuncStatus, label);
+                UpdateShiftStatus();
+                UpdateCtrlStatus();
+                UpdateAltStatus();
             }
         }
 
-        /// <summary>
-        /// Updates the control that displays the status of the
-        /// control that shows whether the scanner position is locked
-        /// or not
-        /// </summary>
-        /// <param name="lockStatus"></param>
-        public void UpdateLockStatus(bool lockStatus)
+        private void setText(object control, String text)
         {
-#if LOCKSTATUS_SUPPORTED
-            if (_screenStatusBarInterface != null && _screenStatusBarInterface.StatusBar.LockStatus != null)
+            if (control is ToolStripStatusLabel)
             {
-                String label = String.Empty;
-                if (lockStatus)
-                {
-                    label = "%";
-                }
-                else
-                {
-                    label = "!";
-                }
-                Windows.SetText(_screenStatusBarInterface.StatusBar.LockStatus, label);
+                (control as ToolStripStatusLabel).Text = text;
             }
-#endif
+            else if (control is StatusBarPanel)
+            {
+                (control as StatusBarPanel).Text = text;
+            }
+            else if (control is Control)
+            {
+                Windows.SetText(control as Control, text);
+            }
         }
     }
 }

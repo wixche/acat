@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="InternetExplorerAgentBase.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,55 +18,21 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Automation;
-using System.Windows.Forms;
 using ACAT.Lib.Core.AgentManagement;
 using ACAT.Lib.Core.AgentManagement.TextInterface;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Collections.Generic;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
 {
     /// <summary>
-    /// Base class for the Application agent for Internet Explorer.
+    /// Base class for the Application agent for Internet Explorer. Enables
+    /// easy browing of web pages, page up, page down, go back, forward,
+    /// search etc.
     /// </summary>
     public class InternetExplorerAgentBase : GenericAppAgentBase
     {
@@ -97,26 +63,26 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
         /// Which features does this agent support?  Widgets for
         /// these feature will be enabled
         /// </summary>
-        private readonly String[] _supportedFeatures =
+        private readonly String[] _supportedCommands =
         {
             "OpenFile",
             "SaveFileAs",
-            "Find",
-            "ContextualMenu",
-            "ZoomIn",
-            "ZoomOut",
-            "ZoomFit",
-            "SelectMode",
-            "SwitchAppWindow"
+            "CmdFind",
+            "CmdContextMenu",
+            "CmdZoomIn",
+            "CmdZoomOut",
+            "CmdZoomFit",
+            "CmdSelectModeToggle",
+            "CmdSwitchApps"
         };
+
+        private bool _scannerShown;
 
         /// <summary>
         /// Which scanner type has been displayed?  Depends on
         /// which element in the browser currently has focus
         /// </summary>
         private ScannerType _scannerType = ScannerType.None;
-
-        private bool _scannerShown;
 
         /// <summary>
         /// Initializes a new instance of the class.
@@ -126,7 +92,7 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
             using (var browser = new WebBrowser())
             {
                 var ver = browser.Version;
-                if (ver.Major == 10)
+                if (ver.Major == 10 || ver.Major == 11)
                 {
                     _explorerElements = new IE10Elements();
                 }
@@ -164,9 +130,9 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
         /// will depend on the current context.
         /// </summary>
         /// <param name="arg">contains info about the widget</param>
-        public override void CheckWidgetEnabled(CheckEnabledArgs arg)
+        public override void CheckCommandEnabled(CommandEnabledArg arg)
         {
-            checkWidgetEnabled(_supportedFeatures, arg);
+            checkCommandEnabled(_supportedCommands, arg);
         }
 
         /// <summary>
@@ -175,11 +141,6 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
         /// <param name="monitorInfo">Foreground window info</param>
         public override void OnContextMenuRequest(WindowActivityMonitorInfo monitorInfo)
         {
-            //if (autoSwitchScanners)
-            //{
-            //    AgentManager.Instance.Keyboard.Send(Keys.F6);
-            //}
-
             showPanel(this, new PanelRequestEventArgs("InternetExplorerContextMenu", ScannerTitle, monitorInfo));
         }
 
@@ -220,10 +181,11 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
         {
             base.OnFocusLost();
             _scannerType = ScannerType.None;
+            _scannerShown = false;
         }
 
         /// <summary>
-        /// Invoked to run a command
+        /// Executes the specified command
         /// </summary>
         /// <param name="command">The command to execute</param>
         /// <param name="commandArg">Optional arguments for the command</param>
@@ -233,8 +195,8 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
             handled = true;
             switch (command)
             {
-                case "CmdThreeFourthMaximizeWindow":
-                    Windows.SetForegroundWindowSizePercent(Context.AppWindowPosition, 75);
+                case "CmdSnapWindow":
+                    Windows.SetForegroundWindowSizePercent(Context.AppWindowPosition, Common.AppPreferences.WindowSnapSizePercent);
                     break;
 
                 case "SwitchAppWindow":
@@ -281,7 +243,6 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
 
                 case "IEFavorites":
                     AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.I);
-                    //AgentController.Instance.Send(Keys.BrowserFavorites);
                     break;
 
                 case "IEHistory":
@@ -300,18 +261,35 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
                     AgentManager.Instance.Keyboard.Send(Keys.F4);
                     break;
 
-                case "IEZoomMenu":
-                    {
-                        var monitorInfo = WindowActivityMonitor.GetForegroundWindowInfo();
-                        var panelArg = new PanelRequestEventArgs("InternetExplorerZoomMenu",
-                            "IExplorer", monitorInfo) { UseCurrentScreenAsParent = true };
-                        showPanel(this, panelArg);
-                    }
+                case "IEBrowserMenu":
+                    showPanel(this, new PanelRequestEventArgs("InternetExplorerBrowserMenu",
+                                                                "IExplorer",
+                                                                WindowActivityMonitor.GetForegroundWindowInfo(),
+                                                                true));
 
+                    break;
+
+                case "IEZoomMenu":
+                    showPanel(this, new PanelRequestEventArgs("InternetExplorerZoomMenu",
+                                                            "IExplorer",
+                                                            WindowActivityMonitor.GetForegroundWindowInfo(),
+                                                            true));
                     break;
 
                 case "IEEmailLink":
                     _explorerElements.EmailPageAsLink();
+                    break;
+
+                case "NewTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.T);
+                    break;
+
+                case "NextTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.Tab);
+                    break;
+
+                case "CloseTab":
+                    AgentManager.Instance.Keyboard.Send(Keys.LControlKey, Keys.W);
                     break;
 
                 default:
@@ -322,7 +300,7 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
 
         /// <summary>
         /// Creates the text control interface for the IE control that
-        /// is currently in focused
+        /// is currently in focus
         /// </summary>
         /// <param name="handle">Handle to the IE window</param>
         /// <param name="focusedElement">the focused element</param>
@@ -350,18 +328,14 @@ namespace ACAT.Lib.Extension.AppAgents.InternetExplorer
         private void autoDisplayScanner(WindowActivityMonitorInfo monitorInfo, ref bool handled)
         {
             handled = true;
+
             if (_explorerElements.IsFavoritesWindow(monitorInfo.FocusedElement) ||
                             _explorerElements.IsHistoryWindow(monitorInfo.FocusedElement) ||
                             _explorerElements.IsFeedsWindow(monitorInfo.FocusedElement))
             {
                 if (!_scannerType.HasFlag(ScannerType.Favorites))
                 {
-                    var args = new PanelRequestEventArgs(PanelClasses.MenuContextMenu, ScannerTitle, monitorInfo)
-                    {
-                        UseCurrentScreenAsParent = true
-                    };
-
-                    showPanel(this, args);
+                    showPanel(this, new PanelRequestEventArgs(PanelClasses.MenuContextMenu, ScannerTitle, monitorInfo, true));
                     _scannerType = ScannerType.Favorites;
                 }
             }

@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="TimedDialogForm.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,48 +18,12 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Extensions.Default.UI.Dialogs
 {
@@ -71,18 +35,20 @@ namespace ACAT.Extensions.Default.UI.Dialogs
     /// by the animation xml file.  An alternate xml file
     /// can be used where the timer is not specified.
     /// </summary>
-    [DescriptorAttribute("22C1D68A-574F-4512-A0C3-579EA9AADD61", "TimedDialogForm", "Timed Dialog")]
+    [DescriptorAttribute("22C1D68A-574F-4512-A0C3-579EA9AADD61",
+                        "TimedDialogForm",
+                        "Timed Dialog")]
     public partial class TimedDialogForm : Form, IDialogPanel, IExtension
     {
         /// <summary>
         /// The DialogCommon object
         /// </summary>
-        private readonly DialogCommon _dialogCommon;
+        private DialogCommon _dialogCommon;
 
         /// <summary>
         /// Enables access to the class methods and properties.
         /// </summary>
-        private ExtensionInvoker _invoker;
+        private readonly ExtensionInvoker _invoker;
 
         /// <summary>
         /// Message to display in the vox
@@ -107,12 +73,6 @@ namespace ACAT.Extensions.Default.UI.Dialogs
             InitializeComponent();
 
             _invoker = new ExtensionInvoker(this);
-
-            _dialogCommon = new DialogCommon(this);
-            if (!_dialogCommon.Initialize())
-            {
-                Log.Debug("Initialization error");
-            }
 
             ShowButton = true;
             Text = _titleText;
@@ -146,6 +106,11 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 Windows.SetText(labelMessage, value);
             }
         }
+
+        /// <summary>
+        /// Gets the PanelCommon object
+        /// </summary>
+        public IPanelCommon PanelCommon { get { return _dialogCommon; } }
 
         /// <summary>
         /// Gets or sets whether to display the OK button
@@ -207,6 +172,18 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
+        /// Intitializes the class
+        /// </summary>
+        /// <param name="startupArg">startup param</param>
+        /// <returns>true on success</returns>
+        public bool Initialize(StartupArg startupArg)
+        {
+            _dialogCommon = new DialogCommon(this);
+
+            return _dialogCommon.Initialize(startupArg);
+        }
+
+        /// <summary>
         /// Triggered when a widget is actuated.
         /// </summary>
         /// <param name="widget">Which one triggered?</param>
@@ -218,7 +195,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
                 return;
             }
 
-            Log.Debug("**Actuate** " + widget.Name + " Value: " + value);
+            Log.Debug("**Actuate**" + widget.Name + " Value: " + value);
 
             switch (value)
             {
@@ -229,7 +206,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         }
 
         /// <summary>
-        /// Pause the scanner
+        /// Pauses the scanner
         /// </summary>
         public void OnPause()
         {
@@ -295,7 +272,7 @@ namespace ACAT.Extensions.Default.UI.Dialogs
         {
             _dialogCommon.OnLoad();
 
-            _dialogCommon.GetAnimationManager().Start(_dialogCommon.GetRootWidget());
+            PanelCommon.AnimationManager.Start(PanelCommon.RootWidget);
         }
     }
 }

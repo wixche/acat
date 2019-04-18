@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="ImageUtils.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,44 +19,10 @@
 ////////////////////////////////////////////////////////////////////////////
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System.IO;
+using System.Reflection;
 
 namespace ACAT.Lib.Core.Utility
 {
@@ -65,6 +31,44 @@ namespace ACAT.Lib.Core.Utility
     /// </summary>
     public class ImageUtils
     {
+        /// <summary>
+        /// Converts the specified icon into a bitmap
+        /// </summary>
+        /// <param name="icon">icon to convert</param>
+        /// <returns>bitmap representation of icon</returns>
+        public static Bitmap ConvertIconToBitmap(Icon icon)
+        {
+            if (icon != null)
+            {
+                using (var memoryStream = new MemoryStream())
+                {
+                    icon.Save(memoryStream);
+                    using (var bitmap = (Bitmap)Image.FromStream(memoryStream))
+                    {
+                        return new Bitmap(bitmap);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Returns the icon of the entry EXE
+        /// </summary>
+        /// <returns>icon, null if none found</returns>
+        public static Icon GetEntryAssemblyIcon()
+        {
+            try
+            {
+                return Icon.ExtractAssociatedIcon(Assembly.GetEntryAssembly().Location);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         /// <summary>
         /// Converts the specified icon to a bitmap
         /// </summary>

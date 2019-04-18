@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="AppWindowManagementHandler.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,50 +18,15 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Windows.Automation;
-using System.Windows.Forms;
+using ACAT.ACATResources;
 using ACAT.Lib.Core.AgentManagement;
+using ACAT.Lib.Core.Extensions;
 using ACAT.Lib.Core.PanelManagement;
 using ACAT.Lib.Core.PanelManagement.CommandDispatcher;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Automation;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Extension.CommandHandlers
 {
@@ -90,19 +55,21 @@ namespace ACAT.Lib.Extension.CommandHandlers
         {
             handled = true;
 
+            IntPtr fgHandle = Windows.GetForegroundWindow();
+
             switch (Command)
             {
                 case "CmdMaximizeWindow":
-                    if (isForegroundWindowSizeable())
+                    if (isWindowSizeable(fgHandle))
                     {
-                        Windows.MaximizeWindow(Windows.GetForegroundWindow());
+                        Windows.MaximizeWindow(fgHandle);
                     }
                     break;
 
                 case "CmdRestoreWindow":
-                    if (isForegroundWindowSizeable())
+                    if (isWindowSizeable(fgHandle))
                     {
-                        Windows.RestoreWindow(Windows.GetForegroundWindow());
+                        Windows.RestoreWindow(fgHandle);
                     }
                     break;
 
@@ -114,7 +81,7 @@ namespace ACAT.Lib.Extension.CommandHandlers
                         win = new WindowHighlight(info.FgHwnd, Dispatcher.Scanner.Form);
                     }
 
-                    if (DialogUtils.ConfirmScanner(null, "Close the highlighted window?"))
+                    if (DialogUtils.ConfirmScanner(null, R.GetString("CloseHighlightedWindow")))
                     {
                         AgentManager.Instance.Keyboard.Send(Keys.LMenu, Keys.F4);
                     }
@@ -127,60 +94,62 @@ namespace ACAT.Lib.Extension.CommandHandlers
                     break;
 
                 case "CmdMoveWindow":
-                    if (!isForegroundWindowSizeable())
+                    if (!isWindowSizeable(fgHandle))
                     {
                         break;
                     }
 
-                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate()
+                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate
                     {
-                        const int delay = 500;
-
-                        Context.AppAgentMgr.Keyboard.Send(Keys.LMenu, Keys.Space);
-                        Thread.Sleep(delay);
-                        Context.AppAgentMgr.Keyboard.Send(Keys.M);
-
                         Form form = Context.AppPanelManager.CreatePanel("WindowMoveResizeScannerForm");
                         if (form != null)
                         {
-                            form.Text = "Move Window";
+                            form.Text = R.GetString("MoveWindow");
+
+                            var extension = form as IExtension;
+                            if (extension != null)
+                            {
+                                extension.GetInvoker().SetValue("MoveWindow", true);
+                            }
+
                             Context.AppPanelManager.ShowDialog(form as IPanel);
                         }
                     }));
                     break;
 
                 case "CmdSizeWindow":
-                    if (!isForegroundWindowSizeable())
+                    if (!isWindowSizeable(fgHandle))
                     {
                         break;
                     }
 
-                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate()
+                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate
                     {
-                        int delay = 500;
-
-                        Context.AppAgentMgr.Keyboard.Send(Keys.LMenu, Keys.Space);
-                        Thread.Sleep(delay);
-                        Context.AppAgentMgr.Keyboard.Send(Keys.S);
-
                         Form form = Context.AppPanelManager.CreatePanel("WindowMoveResizeScannerForm");
                         if (form != null)
                         {
-                            form.Text = "Resize Window";
+                            form.Text = R.GetString("ResizeWindow");
+
+                            var extension = form as IExtension;
+                            if (extension != null)
+                            {
+                                extension.GetInvoker().SetValue("ResizeWindow", true);
+                            }
+
                             Context.AppPanelManager.ShowDialog(form as IPanel);
                         }
                     }));
                     break;
 
                 case "CmdMinimizeWindow":
-                    if (isForegroundWindowSizeable())
+                    if (isWindowMinimizable(fgHandle))
                     {
                         Windows.MinimizeWindow(User32Interop.GetForegroundWindow());
                     }
                     break;
 
                 case "CmdMaxRestoreWindow":
-                    if (!isForegroundWindowSizeable())
+                    if (!isWindowMaximizable(fgHandle))
                     {
                         break;
                     }
@@ -197,28 +166,65 @@ namespace ACAT.Lib.Extension.CommandHandlers
 
                     break;
 
-                case "CmdThreeFourthMaximizeWindow":
-                    if (!isForegroundWindowSizeable())
+                case "CmdSnapWindow":
+                    if (!isWindowSizeable(fgHandle))
                     {
                         break;
                     }
 
-                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate()
+                    Dispatcher.Scanner.Form.Invoke(new MethodInvoker(delegate
                     {
                         Windows.SetForegroundWindowSizePercent(Context.AppWindowPosition,
-                                                                Common.AppPreferences.WindowMaximizeSizePercent);
+                                                                Common.AppPreferences.WindowSnapSizePercent);
                     }));
                     break;
 
-                case "CmdMaximizeThreeFourthToggle":
-                    if (!isForegroundWindowSizeable())
+                case "CmdSnapWindowToggle":
+                    if (!isWindowSizeable(fgHandle))
                     {
                         break;
                     }
 
-                    Windows.ToggleFgWindowMaximizeAndPartialMaximize(Context.AppWindowPosition,
-                                                                Common.AppPreferences.WindowMaximizeSizePercent);
+                    Windows.ToggleSnapForegroundWindow(Context.AppWindowPosition,
+                                                                Common.AppPreferences.WindowSnapSizePercent);
                     break;
+
+                case "CmdDualMonitorMenu":
+                    {
+                        if (DualMonitor.MultipleMonitors && !Context.AppTalkWindowManager.IsTalkWindowVisible)
+                        {
+                            var panel = Context.AppPanelManager.CreatePanel("DualMonitorMenu", R.GetString("DualMonitorMenu")) as IPanel;
+                            if (panel != null)
+                            {
+                                Context.AppPanelManager.Show(Context.AppPanelManager.GetCurrentForm(), panel);
+                            }
+                        }
+                    }
+
+                    break;
+
+                case "CmdMoveToOtherMonitor":
+                    {
+                        if (DualMonitor.MultipleMonitors && !Context.AppTalkWindowManager.IsTalkWindowVisible)
+                        {
+                            DualMonitor.MoveWindowToOtherMonitor(fgHandle);
+                        }
+
+
+                    }
+
+                    break;
+
+                case "CmdMaxInOtherMonitor":
+                    {
+                        if (DualMonitor.MultipleMonitors && !Context.AppTalkWindowManager.IsTalkWindowVisible)
+                        {
+                            DualMonitor.MaximizeWindowInOtherMonitor(fgHandle);
+                        }
+                    }
+
+                    break;
+
 
                 default:
                     handled = false;
@@ -229,33 +235,114 @@ namespace ACAT.Lib.Extension.CommandHandlers
         }
 
         /// <summary>
-        /// Checks if the foreground window is sizeable
+        /// Checks if the window has a TitleBar control and returns
+        /// the element
         /// </summary>
-        /// <returns>true if it is</returns>
-        private bool isForegroundWindowSizeable()
+        /// <param name="element">window automation element</param>
+        /// <returns>the element</returns>
+        private AutomationElement findTitleBar(AutomationElement element)
         {
-            IntPtr fgHandle = Windows.GetForegroundWindow();
+            return AgentUtils.FindElementByAutomationId(element, "", ControlType.TitleBar, "TitleBar");
+        }
+
+        /// <summary>
+        /// Checks if the window can be maximized
+        /// </summary>
+        /// <param name="fgHandle">window handle</param>
+        /// <returns>true if it can</returns>
+        private bool isWindowMaximizable(IntPtr fgHandle)
+        {
             if (fgHandle == IntPtr.Zero)
             {
                 return false;
             }
 
-            bool retVal = false;
+            var window = AutomationElement.FromHandle(fgHandle);
+
+            if (!Windows.IsApplicationFrameHostProcessWindow(fgHandle))
+            {
+                object objPattern;
+                Log.Debug("controltype: " + window.Current.ControlType.ProgrammaticName);
+
+                bool retVal = false;
+                if (window.TryGetCurrentPattern(WindowPattern.Pattern, out objPattern))
+                {
+                    var windowPattern = objPattern as WindowPattern;
+                    retVal = (windowPattern.Current.CanMaximize) && !windowPattern.Current.IsModal;
+
+                    Log.Debug("canmaximize: " + windowPattern.Current.CanMaximize + ", ismodal: " + windowPattern.Current.IsModal);
+                }
+
+                return retVal;
+            }
+
+            var titleBar = findTitleBar(window);
+
+            if (titleBar == null)
+            {
+                return false;
+            }
+
+            var maximizeButton = AgentUtils.FindElementByAutomationId(titleBar, "", ControlType.Button, "Maximize");
+            var restoreButton = AgentUtils.FindElementByAutomationId(titleBar, "", ControlType.Button, "Restore");
+
+            return maximizeButton != null || restoreButton != null;
+        }
+
+        /// <summary>
+        /// Checks if the window can be minimized
+        /// </summary>
+        /// <param name="fgHandle">window handle</param>
+        /// <returns>true if it can</returns>
+        private bool isWindowMinimizable(IntPtr fgHandle)
+        {
+            if (fgHandle == IntPtr.Zero)
+            {
+                return false;
+            }
 
             var window = AutomationElement.FromHandle(fgHandle);
-            object objPattern;
-            Log.Debug("controltype: " + window.Current.ControlType.ProgrammaticName);
 
-            if (window.TryGetCurrentPattern(WindowPattern.Pattern, out objPattern))
+            if (!Windows.IsApplicationFrameHostProcessWindow(fgHandle))
             {
-                var windowPattern = objPattern as WindowPattern;
-                retVal = (windowPattern.Current.CanMinimize ||
-                            windowPattern.Current.CanMaximize) &&
-                            !windowPattern.Current.IsModal;
+                object objPattern;
+                Log.Debug("controltype: " + window.Current.ControlType.ProgrammaticName);
 
-                Log.Debug("canminimize: " + windowPattern.Current.CanMinimize +
-                            ", ismodal: " + windowPattern.Current.IsModal);
+                bool retVal = false;
+                if (window.TryGetCurrentPattern(WindowPattern.Pattern, out objPattern))
+                {
+                    var windowPattern = objPattern as WindowPattern;
+                    retVal = (windowPattern.Current.CanMinimize) && !windowPattern.Current.IsModal;
+
+                    Log.Debug("canminimize: " + windowPattern.Current.CanMinimize + ", ismodal: " + windowPattern.Current.IsModal);
+                }
+
+                return retVal;
             }
+
+            var titleBar = findTitleBar(window);
+
+            if (titleBar == null)
+            {
+                return false;
+            }
+
+            return AgentUtils.FindElementByAutomationId(titleBar, "", ControlType.Button, "Minimize") != null;
+        }
+
+        /// <summary>
+        /// Checks if the window can be resized
+        /// </summary>
+        /// <param name="fgHandle">window handle</param>
+        /// <returns>true if it can</returns>
+        private bool isWindowSizeable(IntPtr fgHandle)
+        {
+            if (fgHandle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            bool retVal = isWindowMaximizable(fgHandle) || isWindowMinimizable(fgHandle);
 
             Log.Debug("returning " + retVal);
 

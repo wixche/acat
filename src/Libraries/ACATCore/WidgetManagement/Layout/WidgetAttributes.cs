@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="WidgetAttributes.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,53 +18,18 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Xml;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.WidgetManagement
 {
     /// <summary>
-    /// Represents a collection of WidgetAttribute objects.  This
-    /// contains attributes for the button key elements
+    /// Represents a collection of WidgetAttribute objects.
+    /// The attributes are read from the <WidgetAttributes> section
+    /// of the scanner config file
     /// </summary>
     public class WidgetAttributes : IDisposable
     {
@@ -87,7 +52,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Gets the collection of button attributes
+        /// Gets the collection of widget attributes
         /// </summary>
         public ICollection<WidgetAttribute> Attributes
         {
@@ -95,7 +60,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Retrieves the WidgetAttribute object for the button
+        /// Retrieves the WidgetAttribute object for the widget
         /// with the specified name
         /// </summary>
         /// <param name="name">name of the button</param>
@@ -110,6 +75,12 @@ namespace ACAT.Lib.Core.WidgetManagement
             }
         }
 
+        /// <summary>
+        /// Checks if  the widget attribute for the specified
+        /// widget name exists.
+        /// </summary>
+        /// <param name="name">name of the widget</param>
+        /// <returns>true if it does</returns>
         public bool Contains(String name)
         {
             return this[name] != null;
@@ -128,7 +99,7 @@ namespace ACAT.Lib.Core.WidgetManagement
         }
 
         /// <summary>
-        /// Load button attribute collection from the XML file. The
+        /// Loads widget attribute collection from the XML file. The
         /// xml fragment that represents this collection is:
         /// <WidgetAttributes>
         ///  <WidgetAttribute name="B1" label="-" value="@CmdSuffix"/>
@@ -151,22 +122,30 @@ namespace ACAT.Lib.Core.WidgetManagement
 
             if (File.Exists(configFile))
             {
-                xmlDoc.Load(configFile);
-
-                XmlNodeList widgetAttributeNodes = xmlDoc.SelectNodes("/ACAT/WidgetAttributes/WidgetAttribute");
-                if (_widgetAttributes == null)
+                try
                 {
-                    return false;
-                }
+                    xmlDoc.Load(configFile);
 
-                // load all the elements
-                foreach (XmlNode node in widgetAttributeNodes)
-                {
-                    var widgetAttribute = WidgetAttribute.CreateWidgetAttribute(node);
-                    if (!_widgetAttributes.ContainsKey(widgetAttribute.Name))
+                    XmlNodeList widgetAttributeNodes = xmlDoc.SelectNodes("/ACAT/WidgetAttributes/WidgetAttribute");
+                    if (_widgetAttributes == null)
                     {
-                        _widgetAttributes.Add(widgetAttribute.Name, widgetAttribute);
+                        return false;
                     }
+
+                    // load all the elements
+                    foreach (XmlNode node in widgetAttributeNodes)
+                    {
+                        var widgetAttribute = WidgetAttribute.CreateWidgetAttribute(node);
+                        if (!_widgetAttributes.ContainsKey(widgetAttribute.Name))
+                        {
+                            _widgetAttributes.Add(widgetAttribute.Name, widgetAttribute);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("Error loading config file " + configFile + ", " + ex.ToString());
+                    retVal = false;
                 }
             }
             else

@@ -1,7 +1,7 @@
-﻿////////////////////////////////////////////////////////////////////////////
+﻿////////////////////////////52788////////////////////////////////////////////////
 // <copyright file="MSWordAgent.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,10 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System.Diagnostics.CodeAnalysis;
+using ACAT.Lib.Core.PreferencesManagement;
 using ACAT.Lib.Core.UserManagement;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Extension.AppAgents.MSWord;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.Extensions.Base.AppAgents.MSWordAgent
 {
@@ -65,7 +30,9 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.MSWordAgent
     /// Base class does all the heavy-lifting.  Override functions
     /// as required customize
     /// </summary>
-    [DescriptorAttribute("4482C5C8-2713-45E7-94C9-84B0855BF92D", "MS Word Agent", "Agent for Microsoft Word")]
+    [DescriptorAttribute("4482C5C8-2713-45E7-94C9-84B0855BF92D",
+                            "MS Word Agent",
+                            "Manages interactions with Microsoft Word to edit Word documents")]
     internal class MSWordAgent : MSWordAgentBase
     {
         /// <summary>
@@ -78,13 +45,36 @@ namespace ACAT.Lib.Core.Extensions.Base.AppAgents.MSWordAgent
         /// </summary>
         private const string SettingsFileName = "MSWordAgentSettings.xml";
 
-        // override functions here if necessary
+        /// <summary>
+        /// Initializes an instance of the class
+        /// </summary>
         public MSWordAgent()
         {
             MSWordAgentSettings.PreferencesFilePath = UserManager.GetFullPath(SettingsFileName);
+
             Settings = MSWordAgentSettings.Load();
 
             autoSwitchScanners = Settings.AutoSwitchScannerEnable;
+            autoUnprotectWordDocs = Settings.AutoUnprotectWordDocs;
+            snapWindowDockAlphabetScanner = Settings.SnapWindowDockAlphabetScanner;
+        }
+
+        /// <summary>
+        /// Returns the default settings
+        /// </summary>
+        /// <returns>Default settings object</returns>
+        public override IPreferences GetDefaultPreferences()
+        {
+            return PreferencesBase.LoadDefaults<MSWordAgentSettings>();
+        }
+
+        /// <summary>
+        /// Returns the settings for this agent
+        /// </summary>
+        /// <returns>The settings object</returns>
+        public override IPreferences GetPreferences()
+        {
+            return Settings;
         }
     }
 }

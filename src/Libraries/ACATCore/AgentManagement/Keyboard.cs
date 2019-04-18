@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="Keyboard.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,54 +18,18 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.AgentManagement
 {
     /// <summary>
-    /// Sends keystokes to the active window.
+    /// Sends keystokes to the active window by inserting them
+    /// into the Windows keyboard buffer
     /// </summary>
     public class Keyboard : IKeyboard
     {
@@ -225,6 +189,8 @@ namespace ACAT.Lib.Core.AgentManagement
         {
             AgentManager.Instance.TextControlAgent.SetFocus();
 
+            AgentManager.Instance.TextChangedNotifications.Hold();
+
             var enumerable = extendedKeys as IList<Keys> ?? extendedKeys.ToList();
             foreach (Keys key in enumerable)
             {
@@ -238,6 +204,9 @@ namespace ACAT.Lib.Core.AgentManagement
             {
                 ExtendedKeyUp(key);
             }
+
+            AgentManager.Instance.TextChangedNotifications.Release();
+
         }
 
         /// <summary>
@@ -250,6 +219,8 @@ namespace ACAT.Lib.Core.AgentManagement
         {
             AgentManager.Instance.TextControlAgent.SetFocus();
 
+            AgentManager.Instance.TextChangedNotifications.Hold();
+
             ExtendedKeyDown(extendedKey);
 
             if (!trySendExtendedASCII(ch))
@@ -258,6 +229,9 @@ namespace ACAT.Lib.Core.AgentManagement
             }
 
             ExtendedKeyUp(extendedKey);
+
+            AgentManager.Instance.TextChangedNotifications.Release();
+
         }
 
         /// <summary>
@@ -266,6 +240,8 @@ namespace ACAT.Lib.Core.AgentManagement
         /// <param name="keysToSend">array of keys</param>
         public void Send(params Keys[] keysToSend)
         {
+            AgentManager.Instance.TextChangedNotifications.Hold();
+
             for (int ii = 0; ii < keysToSend.Length - 1; ii++)
             {
                 ExtendedKeyDown(keysToSend[ii]);
@@ -278,6 +254,9 @@ namespace ACAT.Lib.Core.AgentManagement
             {
                 ExtendedKeyUp(keysToSend[ii]);
             }
+
+            AgentManager.Instance.TextChangedNotifications.Release();
+
         }
 
         /// <summary>
@@ -288,8 +267,13 @@ namespace ACAT.Lib.Core.AgentManagement
         {
             AgentManager.Instance.TextControlAgent.SetFocus();
 
+            AgentManager.Instance.TextChangedNotifications.Hold();
+
             ExtendedKeyDown(keyToSend);
             ExtendedKeyUp(keyToSend);
+
+            AgentManager.Instance.TextChangedNotifications.Release();
+
         }
 
         /// <summary>
@@ -411,12 +395,12 @@ namespace ACAT.Lib.Core.AgentManagement
         private bool trySendExtendedASCII(char ch)
         {
             bool retVal = true;
-            int scanCode = User32Interop.VkKeyScan(ch);
 
+            int scanCode = User32Interop.VkKeyScan(ch);
             if (scanCode < 0)
             {
-                String str = Encoding.Default.GetString(new[] { (byte)ch });
-                SendKeys.SendWait(str);
+                //String str = Encoding.Default.GetString(new[] { (byte)ch });
+                SendKeys.SendWait(ch.ToString());
             }
             else
             {

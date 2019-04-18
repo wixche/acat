@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="CheckBoxWidget.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,49 +18,47 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Windows.Forms;
 using ACAT.Lib.Core.Utility;
 using ACAT.Lib.Core.WidgetManagement;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Windows.Forms;
 
 namespace ACAT.Lib.Core.Widgets
 {
+    /// <summary>
+    /// Extension class for checkbox widget
+    /// </summary>
+    public static class CheckBoxWidgetExtensionMethods
+    {
+        /// <summary>
+        /// Returns the toggle state of the checkbox widget
+        /// </summary>
+        /// <param name="widget">checkboxwidget object</param>
+        /// <returns>the current state, true if checked</returns>
+        public static bool GetState(this CheckBoxWidget widget)
+        {
+            if (widget != null)
+            {
+                return widget.GetToggleState();
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Sets the toggle state of the checkbox widget
+        /// </summary>
+        /// <param name="widget">Checkbox widget</param>
+        /// <param name="state">the state to set to</param>
+        public static void SetState(this CheckBoxWidget widget, Boolean state)
+        {
+            if (widget != null)
+            {
+                widget.SetToggleState(state);
+            }
+        }
+    }
+
     /// <summary>
     /// A widget that represents a checkbox.  Everytime the user clicks on
     /// the widget or selects it, it toggles the text in the Control.  On the
@@ -112,8 +110,7 @@ namespace ACAT.Lib.Core.Widgets
         }
 
         /// <summary>
-        /// Load button parameters from the xml file. Reads the text for
-        ///  the oN/OFF states
+        /// Loads widget specific parameters from the xml file.
         /// </summary>
         /// <param name="node">xml node to parse</param>
         public override void Load(System.Xml.XmlNode node)
@@ -155,7 +152,8 @@ namespace ACAT.Lib.Core.Widgets
         /// Triggered when the toggle button is actuated. Flip state
         /// and notify
         /// </summary>
-        /// <param name="child"></param>
+        /// <param name="sender">event sender</param>
+        /// <param name="e">event args</param>
         private void CheckBoxWidget_EvtActuated(object sender, WidgetEventArgs e)
         {
             SetToggleState(!_toggleState);

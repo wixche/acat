@@ -1,7 +1,7 @@
-﻿////////////////////////////////////////////////////////////////////////////
+﻿/////////////////+++++++++++++++++++++++++++++++++++///////////////////////////////////////////////////////////
 // <copyright file="WindowOverlapWatchdog.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,56 +18,22 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
+using ACAT.Lib.Core.Utility;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Windows.Forms;
-using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1126:PrefixCallsCorrectly",
-    Scope = "namespace",
-    Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1101:PrefixLocalCallsWithThis",
-    Scope = "namespace",
-    Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.ReadabilityRules",
-    "SA1121:UseBuiltInTypeAlias",
-    Scope = "namespace",
-    Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.DocumentationRules",
-    "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-    Scope = "namespace",
-    Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.NamingRules",
-    "SA1309:FieldNamesMustNotBeginWithUnderscore",
-    Scope = "namespace",
-    Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-    "StyleCop.CSharp.NamingRules",
-    "SA1300:ElementMustBeginWithUpperCaseLetter",
-    Scope = "namespace",
-    Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
 
 namespace ACAT.Lib.Core.PanelManagement
 {
     /// <summary>
-    /// Keeps watch if the form is getting obscured by other windows and if so,
-    /// brings it back on top. Based on a watchdog timer.  This is useful to
-    /// make sure nothing else overlaps.  The TopMost attribute can be used
-    /// to make a window the topmost window but if another window also has the
-    /// TopMost attribute set, that window could overlap our window.  This
-    /// class makes sure that doesn't happen
+    /// Keeps watch if the form is getting obscured by other
+    /// windows and if so, brings it back on top. Based on a
+    /// watchdog timer.  This is useful to make sure nothing else
+    /// overlaps.  The TopMost attribute can be used to make
+    /// a window the topmost window but if another window
+    /// also has the TopMost attribute set, that window could
+    /// overlap our window.  This class makes sure that
+    /// doesn't happen
     /// </summary>
     public class WindowOverlapWatchdog : IDisposable
     {
@@ -77,6 +43,11 @@ namespace ACAT.Lib.Core.PanelManagement
         private const int Interval = 1500;
 
         /// <summary>
+        /// Set to true to Force to stay on top.
+        /// </summary>
+        private readonly bool _force;
+
+        /// <summary>
         /// Pause operations?
         /// </summary>
         private bool _isPaused;
@@ -84,7 +55,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <summary>
         /// Timer to check for overlap
         /// </summary>
-        private Timer _timer;
+        private System.Timers.Timer _timer;
 
         /// <summary>
         /// The form
@@ -95,11 +66,13 @@ namespace ACAT.Lib.Core.PanelManagement
         /// Initializes a new instance of the class.
         /// </summary>
         /// <param name="window">The form that needs to stay on top</param>
-        public WindowOverlapWatchdog(Form window)
+        /// <param name="force">set to true to force to stay on top</param>
+        public WindowOverlapWatchdog(Form window, bool force = false)
         {
             _window = window;
-            _timer = new Timer { Enabled = true, Interval = Interval };
-            _timer.Tick += timer_Tick;
+            _force = force;
+            _timer = new System.Timers.Timer { Enabled = true, Interval = Interval };
+            _timer.Elapsed += timer_Elapsed;
             window.VisibleChanged += window_VisibleChanged;
         }
 
@@ -109,16 +82,25 @@ namespace ACAT.Lib.Core.PanelManagement
         /// <returns></returns>
         public void Dispose()
         {
+            if (_window != null)
+            {
+                Log.Debug("DISPOSE!!  for " + _window.Name);
+                _window.VisibleChanged -= window_VisibleChanged;
+            }
+
             if (_timer != null)
             {
-                _timer.Tick -= timer_Tick;
+                _timer.Elapsed-= timer_Elapsed;
                 _timer.Stop();
                 _timer.Dispose();
                 _timer = null;
             }
 
-            _window.VisibleChanged -= window_VisibleChanged;
-            _window = null;
+            if (_window != null)
+            {
+                _window.VisibleChanged -= window_VisibleChanged;
+                _window = null;
+            }
         }
 
         /// <summary>
@@ -126,6 +108,8 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Pause()
         {
+            Log.Debug("PAUSSE!!  for " + _window.Name);
+
             stopTimer();
             _isPaused = true;
         }
@@ -135,6 +119,8 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         public void Resume()
         {
+            Log.Debug("RESUME!!  for " + _window.Name);
+
             _isPaused = false;
             startTimer();
         }
@@ -171,10 +157,23 @@ namespace ACAT.Lib.Core.PanelManagement
                 cache.Add(windowHandle);
 
                 bool isScanner = false;
-                if (User32Interop.IsWindowVisible(windowHandle))
+                if (!_force && User32Interop.IsWindowVisible(windowHandle))
                 {
-                    Control ctl = Form.FromHandle(windowHandle);
-                    isScanner = (ctl is Form) && (ctl is IScannerPanel);
+                    try
+                    {
+                        Control ctl = Form.FromHandle(windowHandle);
+                        isScanner = (ctl is Form) && (ctl is IScannerPanel);
+                        if (isScanner)
+                        {
+                            double opacity = Windows.GetOpacity(ctl as Form);
+                            isScanner = (opacity == 1.0f);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        isScanner = false;
+                        Log.Debug("isScanner logic exception " + ex);
+                    }
                 }
 
                 if (User32Interop.IsWindowVisible(windowHandle) &&
@@ -186,6 +185,8 @@ namespace ACAT.Lib.Core.PanelManagement
                     return true;
                 }
             }
+
+            cache.Clear();
 
             return false;
         }
@@ -218,7 +219,7 @@ namespace ACAT.Lib.Core.PanelManagement
         /// </summary>
         /// <param name="sender">event sender</param>
         /// <param name="e">event args</param>
-        private void timer_Tick(object sender, EventArgs e)
+        private void timer_Elapsed(object sender, EventArgs e)
         {
             try
             {
@@ -233,7 +234,7 @@ namespace ACAT.Lib.Core.PanelManagement
             }
             catch (Exception ex)
             {
-                Log.Debug("exception occured!  ex=" + ex);
+                Log.Debug("exception occured!  ex=" + ex + "for " + (_window != null ? _window.Name : "null"));
             }
         }
 

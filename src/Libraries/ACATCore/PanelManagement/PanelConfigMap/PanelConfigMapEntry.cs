@@ -1,7 +1,7 @@
 ﻿////////////////////////////////////////////////////////////////////////////
 // <copyright file="PanelConfigMapEntry.cs" company="Intel Corporation">
 //
-// Copyright (c) 2013-2015 Intel Corporation 
+// Copyright (c) 2013-2017 Intel Corporation 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,45 +18,9 @@
 // </copyright>
 ////////////////////////////////////////////////////////////////////////////
 
-using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Xml;
 using ACAT.Lib.Core.Utility;
-
-#region SupressStyleCopWarnings
-
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1126:PrefixCallsCorrectly",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1101:PrefixLocalCallsWithThis",
-        Scope = "namespace",
-        Justification = "Not needed. ACAT naming conventions takes care of this")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.ReadabilityRules",
-        "SA1121:UseBuiltInTypeAlias",
-        Scope = "namespace",
-        Justification = "Since they are just aliases, it doesn't really matter")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.DocumentationRules",
-        "SA1200:UsingDirectivesMustBePlacedWithinNamespace",
-        Scope = "namespace",
-        Justification = "ACAT guidelines")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1309:FieldNamesMustNotBeginWithUnderscore",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private fields begin with an underscore")]
-[module: SuppressMessage(
-        "StyleCop.CSharp.NamingRules",
-        "SA1300:ElementMustBeginWithUpperCaseLetter",
-        Scope = "namespace",
-        Justification = "ACAT guidelines. Private/Protected methods begin with lowercase")]
-
-#endregion SupressStyleCopWarnings
+using System;
+using System.Xml;
 
 namespace ACAT.Lib.Core.PanelManagement
 {
@@ -75,23 +39,27 @@ namespace ACAT.Lib.Core.PanelManagement
             ConfigName = String.Empty;
             ConfigFileName = String.Empty;
             FormId = Guid.Empty;
+            Description = String.Empty;
         }
 
         /// <summary>
         /// Initializes a new instance of the class.
         /// </summary>
+        /// <param name="configId">config id</param>
         /// <param name="panelClass">class of the scanner</param>
         /// <param name="configName">animation config name </param>
         /// <param name="configFileName">animation config file name for the scanner</param>
         /// <param name="formId">guid of the scanner</param>
         /// <param name="formType">.NET class Type of the scanner</param>
-        public PanelConfigMapEntry(String panelClass, String configName, String configFileName, Guid formId, Type formType)
+        public PanelConfigMapEntry(Guid configId, String panelClass, String configName, String configFileName, Guid formId, Type formType, String description = null)
         {
             PanelClass = panelClass;
             ConfigName = configName;
             ConfigFileName = configFileName;
             FormId = formId;
             FormType = formType;
+            ConfigId = configId;
+            Description = description ?? String.Empty;
         }
 
         /// <summary>
@@ -100,9 +68,19 @@ namespace ACAT.Lib.Core.PanelManagement
         public String ConfigFileName { get; internal set; }
 
         /// <summary>
+        /// Unique id for this entry
+        /// </summary>
+        public Guid ConfigId { get; internal set; }
+
+        /// <summary>
         /// Gets the name of the configuration for the scanner
         /// </summary>
         public String ConfigName { get; internal set; }
+
+        /// <summary>
+        /// User friendly description of this entry
+        /// </summary>
+        public String Description { get; internal set; }
 
         /// <summary>
         /// Gets the ACAT descriptor guid for the scanner
@@ -154,6 +132,10 @@ namespace ACAT.Lib.Core.PanelManagement
             ConfigFileName = XmlUtils.GetXMLAttrString(node, "configFile").ToLower();
             ConfigName = XmlUtils.GetXMLAttrString(node, "configName");
             PanelClass = XmlUtils.GetXMLAttrString(node, "panelClass");
+            Description = XmlUtils.GetXMLAttrString(node, "description");
+
+            var configIdString = XmlUtils.GetXMLAttrString(node, "configId");
+
             if (String.IsNullOrEmpty(PanelClass))
             {
                 PanelClass = ConfigName;
@@ -163,6 +145,7 @@ namespace ACAT.Lib.Core.PanelManagement
 
             if (String.IsNullOrEmpty(ConfigFileName) ||
                 String.IsNullOrEmpty(ConfigName) ||
+                String.IsNullOrEmpty(configIdString) ||
                 String.IsNullOrEmpty(guidString))
             {
                 retVal = false;
@@ -174,6 +157,12 @@ namespace ACAT.Lib.Core.PanelManagement
                 if (retVal)
                 {
                     FormId = guid;
+                }
+
+                retVal = Guid.TryParse(configIdString, out guid);
+                if (retVal)
+                {
+                    ConfigId = guid;
                 }
             }
 
